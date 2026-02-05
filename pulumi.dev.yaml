@@ -1,0 +1,10 @@
+config:
+  aws:region: us-east-1
+  my-app:appName: sprinklerBlowouts
+  my-app:subdomain: blowouts                                    # becomes my-app.yourdomain.com
+  my-app:platformStack: organization/portfolio-platform/dev    # reference to the shared platform stack
+  my-app:cpu: "256"
+  my-app:memory: "512"
+  my-app:desiredCount: "1"
+  my-app:containerPort: "3000"
+  my-app:useFargateSpot: "true"
