@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ServiceZone {
+  id        String   @id @default(cuid())
+  name      String
+  centerLat Float
+  centerLng Float
+  radiusMi  Float    @default(15)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  availableDates AvailableDate[]
+  bookings       Booking[]
+  routeGroups    RouteGroup[]
+
+  @@map("service_zones")
+}
+
+enum TimeOfDay {
+  MORNING
+  AFTERNOON
+  EVENING
+}
+
+model AvailableDate {
+  id          String   @id @default(cuid())
+  zoneId      String
+  date        DateTime @db.Date
+  timeOfDay   TimeOfDay
+  maxBookings Int      @default(20)
+  createdAt   DateTime @default(now())
+
+  zone     ServiceZone  @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@unique([zoneId, date, timeOfDay])
+  @@map("available_dates")
+}
+
+enum BookingStatus {
+  PENDING
+  AWAITING_SCHEDULE
+  SCHEDULED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Booking {
+  id              String        @id @default(cuid())
+  jobNumber       String        @unique
+  customerName    String
+  customerEmail   String
+  customerPhone   String?
+  address         String
+  city            String
+  state           String        @default("CO")
+  zip             String
+  lat             Float?
+  lng             Float?
+  preferredTime   TimeOfDay
+  status          BookingStatus @default(PENDING)
+  notes           String?
+  zoneId          String?
+  availableDateId String?
+  routeGroupId    String?
+  routeOrder      Int?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  zone          ServiceZone?   @relation(fields: [zoneId], references: [id])
+  availableDate AvailableDate? @relation(fields: [availableDateId], references: [id])
+  routeGroup    RouteGroup?    @relation(fields: [routeGroupId], references: [id])
+  emailLogs     EmailLog[]
+
+  @@index([jobNumber])
+  @@index([status])
+  @@index([zoneId])
+  @@map("bookings")
+}
+
+model RouteGroup {
+  id                String    @id @default(cuid())
+  zoneId            String
+  date              DateTime  @db.Date
+  timeOfDay         TimeOfDay
+  optimizedRoute    Json?
+  estimatedDuration Int?      // minutes
+  estimatedDistance  Float?    // miles
+  houseCount        Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  zone     ServiceZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@map("route_groups")
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  OPERATOR
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  role         AdminRole @default(OPERATOR)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("admin_users")
+}
+
+enum EmailType {
+  CONFIRMATION
+  REMINDER
+  UPDATE
+  CANCELLATION
+}
+
+model EmailLog {
+  id        String    @id @default(cuid())
+  bookingId String
+  emailType EmailType
+  to        String
+  subject   String
+  sentAt    DateTime  @default(now())
+  success   Boolean   @default(true)
+  error     String?
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("email_logs")
+}

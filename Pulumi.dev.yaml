@@ -1,10 +1,10 @@
 config:
   aws:region: us-east-1
   sprinklerBlowouts:appName: sprinkler-blowouts
-  sprinklerBlowouts:subdomain: blowouts                                    # becomes my-app.yourdomain.com
-  sprinklerBlowouts:platformStack: Cwnelson215-org/portfolio-platform/dev    # reference to the shared platform stack
-  sprinklerBlowouts:cpu: "256"
-  sprinklerBlowouts:memory: "512"
+  sprinklerBlowouts:subdomain: blowouts
+  sprinklerBlowouts:platformStack: Cwnelson215-org/portfolio-platform/dev
+  sprinklerBlowouts:cpu: "512"
+  sprinklerBlowouts:memory: "1024"
   sprinklerBlowouts:desiredCount: "1"
   sprinklerBlowouts:containerPort: "3000"
   sprinklerBlowouts:useFargateSpot: "true"

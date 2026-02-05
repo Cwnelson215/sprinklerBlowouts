@@ -22,6 +22,10 @@ const scaleUpHour = parseInt(config.get("scaleUpHour") || "6");    // 6 AM
 const scaleDownHour = parseInt(config.get("scaleDownHour") || "22"); // 10 PM
 const scheduleTimezone = config.get("scheduleTimezone") || "America/Denver";
 
+// App-specific secrets/config
+const jwtSecret = config.requireSecret("jwtSecret");
+const emailDomain = config.get("emailDomain") || "";
+
 // =============================================================================
 // Import Platform Stack Outputs
 // =============================================================================
@@ -178,6 +182,24 @@ const listenerRule = new aws.lb.ListenerRule(`${appName}-rule`, {
 // ECS Task Definition
 // =============================================================================
 
+// =============================================================================
+// SES Permissions for task role
+// =============================================================================
+
+const sesPolicy = new aws.iam.RolePolicy(`${appName}-ses-policy`, {
+  role: taskRoleArn.apply(arn => arn.split("/").pop()!),
+  policy: JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Action: ["ses:SendEmail", "ses:SendRawEmail"],
+        Resource: "*",
+      },
+    ],
+  }),
+});
+
 // Build environment variables
 const containerEnv = [
   { name: "NODE_ENV", value: "production" },
@@ -194,21 +216,30 @@ const taskDefinition = new aws.ecs.TaskDefinition(`${appName}-task`, {
   executionRoleArn: taskExecutionRoleArn,
   taskRoleArn: taskRoleArn,
   containerDefinitions: pulumi
-    .all([ecrRepo.repositoryUrl, logGroupName, region, dbEndpoint, dbPasswordSecretArn])
-    .apply(([repoUrl, logGroup, awsRegion, dbHost, dbSecretArn]) => {
+    .all([ecrRepo.repositoryUrl, logGroupName, region, dbEndpoint, dbPasswordSecretArn, jwtSecret, domainName])
+    .apply(([repoUrl, logGroup, awsRegion, dbHost, dbSecretArn, jwtSecretValue, domain]) => {
       const env = [...containerEnv];
       const secrets: { name: string; valueFrom: string }[] = [];
 
       // Add database config if available
       if (dbHost) {
-        env.push({ name: "DB_HOST", value: dbHost.split(":")[0] });
+        const host = dbHost.split(":")[0];
+        env.push({ name: "DB_HOST", value: host });
         env.push({ name: "DB_PORT", value: "5432" });
         env.push({ name: "DB_NAME", value: appName.replace(/-/g, "_") });
         env.push({ name: "DB_USER", value: "portfolio_admin" });
+        // Build DATABASE_URL for Prisma
+        env.push({ name: "DATABASE_URL_HOST", value: host });
       }
       if (dbSecretArn) {
         secrets.push({ name: "DB_PASSWORD", valueFrom: dbSecretArn });
       }
+
+      // App-specific env vars
+      env.push({ name: "JWT_SECRET", value: jwtSecretValue });
+      env.push({ name: "EMAIL_DOMAIN", value: emailDomain || domain });
+      env.push({ name: "NEXT_PUBLIC_APP_URL", value: `https://${subdomain}.${domain}` });
+      env.push({ name: "AWS_REGION", value: awsRegion });
 
       return JSON.stringify([
         {
