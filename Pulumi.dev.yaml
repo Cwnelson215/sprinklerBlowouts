@@ -8,3 +8,5 @@ config:
   sprinklerBlowouts:desiredCount: "1"
   sprinklerBlowouts:containerPort: "3000"
   sprinklerBlowouts:useFargateSpot: "true"
+  sprinklerBlowouts:jwtSecret:
+    secure: AAABALZnlcXJN630MgmWQ6mCnY9I+2IbVDT/wzTEjoXB6mqu0ncGQaUIwDFqp1Fc7ol2Js8DpNKx3Jrjkog42A/RXFuPgDas4WS9NA==
