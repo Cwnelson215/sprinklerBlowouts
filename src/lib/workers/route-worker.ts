@@ -99,8 +99,8 @@ export function registerRouteWorkers(boss: PgBoss) {
         lng: b.lng!,
       }));
 
-      // Re-cluster
-      const clusters = dbscan(points, 1.5, 2);
+      // Re-cluster with 5-mile max radius constraint
+      const clusters = dbscan(points, 1.5, 2, 5);
 
       // For the main cluster (largest), optimize route
       const mainCluster = clusters.reduce((a, b) =>
