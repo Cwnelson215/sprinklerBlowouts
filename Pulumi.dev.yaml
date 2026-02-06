@@ -10,3 +10,5 @@ config:
   sprinklerBlowouts:useFargateSpot: "true"
   sprinklerBlowouts:jwtSecret:
     secure: AAABALZnlcXJN630MgmWQ6mCnY9I+2IbVDT/wzTEjoXB6mqu0ncGQaUIwDFqp1Fc7ol2Js8DpNKx3Jrjkog42A/RXFuPgDas4WS9NA==
+  sprinklerBlowouts:mongodbUri:
+    secure: AAABAMb5nLy1xlgFhQaIK09jxWpNq5C06w66b0n8B5q76UzxUrSsuNFkNAp3+OqHZP7YLeVF4qeIiv5taUcz12Xy13NkeKcnAOm/txDgi1W89uzHjHI9D10Dc9KITCTMf/faNlg=

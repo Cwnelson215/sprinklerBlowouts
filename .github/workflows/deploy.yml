@@ -123,50 +123,6 @@ jobs:
             sleep 30
           done
 
-      - name: Run database migrations
-        env:
-          ENVIRONMENT: ${{ github.event.inputs.environment || 'dev' }}
-          APP_NAME: ${{ steps.app-info.outputs.app-name }}
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
-        run: |
-          CLUSTER="portfolio-${ENVIRONMENT}-cluster"
-          STACK="${{ github.event.inputs.environment || 'dev' }}"
-
-          # Get the migration task definition from Pulumi outputs
-          MIGRATION_TASK_DEF=$(pulumi stack output migrationTaskDefinitionArn --stack "$STACK")
-          echo "Using migration task definition: $MIGRATION_TASK_DEF"
-
-          # Get network configuration from the running service
-          SUBNETS=$(aws ecs describe-services --cluster $CLUSTER --services $APP_NAME --query 'services[0].networkConfiguration.awsvpcConfiguration.subnets' --output text | tr '\t' ',')
-          SECURITY_GROUPS=$(aws ecs describe-services --cluster $CLUSTER --services $APP_NAME --query 'services[0].networkConfiguration.awsvpcConfiguration.securityGroups' --output text | tr '\t' ',')
-
-          echo "Running migration task..."
-          TASK_ARN=$(aws ecs run-task \
-            --cluster $CLUSTER \
-            --task-definition "$MIGRATION_TASK_DEF" \
-            --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUPS],assignPublicIp=ENABLED}" \
-            --query 'tasks[0].taskArn' \
-            --output text)
-
-          echo "Migration task started: $TASK_ARN"
-          TASK_ID=$(echo $TASK_ARN | awk -F'/' '{print $NF}')
-
-          echo "Waiting for migration task to complete..."
-          aws ecs wait tasks-stopped --cluster $CLUSTER --tasks $TASK_ARN
-
-          # Check exit code
-          EXIT_CODE=$(aws ecs describe-tasks --cluster $CLUSTER --tasks $TASK_ARN --query 'tasks[0].containers[0].exitCode' --output text)
-          echo "Migration task exit code: $EXIT_CODE"
-
-          if [ "$EXIT_CODE" != "0" ]; then
-            echo "Migration failed! Fetching logs..."
-            aws logs tail /ecs/portfolio-${ENVIRONMENT} --filter-pattern "$APP_NAME-migration" --since 5m || true
-            exit 1
-          fi
-
-          echo "Migrations completed successfully!"
-
       - name: Output App URL
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
