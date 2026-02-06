@@ -134,7 +134,7 @@ const targetGroup = new aws.lb.TargetGroup(`${appName}-tg`, {
   targetType: "ip",
   healthCheck: {
     enabled: true,
-    path: "/health",
+    path: "/api/health",
     healthyThreshold: 2,
     unhealthyThreshold: 3,
     timeout: 5,
@@ -263,7 +263,7 @@ const taskDefinition = new aws.ecs.TaskDefinition(`${appName}-task`, {
             },
           },
           healthCheck: {
-            command: ["CMD-SHELL", `curl -f http://localhost:${containerPort}/health || exit 1`],
+            command: ["CMD-SHELL", `curl -f http://localhost:${containerPort}/api/health || exit 1`],
             interval: 30,
             timeout: 5,
             retries: 3,
