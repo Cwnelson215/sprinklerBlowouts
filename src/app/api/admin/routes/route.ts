@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAdminFromRequest } from "@/lib/auth";
-import { getQueue, JOBS } from "@/lib/queue";
+import { scheduleJob, JOBS } from "@/lib/queue";
 
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromRequest(req);
@@ -59,8 +59,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { zoneId, date } = body;
 
-    const boss = await getQueue();
-    await boss.send(JOBS.OPTIMIZE_ROUTES, {
+    await scheduleJob(JOBS.OPTIMIZE_ROUTES, {
       zoneId: zoneId || undefined,
       date: date || undefined,
     });

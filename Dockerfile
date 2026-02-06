@@ -31,23 +31,9 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Copy Prisma files for migrations
+# Copy Prisma client
 COPY --from=deps /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=deps /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=deps /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/prisma ./prisma
-
-# Fix permissions for Prisma migrations
-RUN chown -R nextjs:nodejs node_modules/.prisma node_modules/@prisma node_modules/prisma prisma
-
-# Add migration script
-RUN echo '#!/bin/sh' > /app/migrate.sh && \
-    echo 'ENCODED_PASS=$(node -e "console.log(encodeURIComponent(process.env.DB_PASSWORD || \"\"))")' >> /app/migrate.sh && \
-    echo 'export DATABASE_URL="postgresql://${DB_USER}:${ENCODED_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"' >> /app/migrate.sh && \
-    echo 'echo "Running migrations against ${DB_HOST}/${DB_NAME}..."' >> /app/migrate.sh && \
-    echo 'node node_modules/prisma/build/index.js migrate deploy' >> /app/migrate.sh && \
-    chmod +x /app/migrate.sh && \
-    chown nextjs:nodejs /app/migrate.sh
 
 USER nextjs
 

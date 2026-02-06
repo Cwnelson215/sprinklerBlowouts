@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { bookingSchema } from "@/lib/validation";
 import { generateJobNumber } from "@/lib/utils";
-import { getQueue, JOBS } from "@/lib/queue";
+import { scheduleJob, JOBS } from "@/lib/queue";
 
 export async function POST(req: NextRequest) {
   try {
@@ -53,8 +53,7 @@ export async function POST(req: NextRequest) {
 
     // Queue geocoding job
     try {
-      const boss = await getQueue();
-      await boss.send(JOBS.GEOCODE_ADDRESS, { bookingId: booking.id });
+      await scheduleJob(JOBS.GEOCODE_ADDRESS, { bookingId: booking.id });
     } catch (err) {
       console.error("Failed to queue geocode job:", err);
     }

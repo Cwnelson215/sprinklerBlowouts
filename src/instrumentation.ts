@@ -1,29 +1,32 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { getQueue, JOBS } = await import("./lib/queue");
-    const { registerGeocodeWorker } = await import("./lib/workers/geocode-worker");
-    const { registerRouteWorkers } = await import("./lib/workers/route-worker");
-    const { registerEmailWorkers } = await import("./lib/workers/email-worker");
+    const { registerHandler, startPolling, scheduleRecurring, JOBS } = await import("./lib/queue");
+    const { handleGeocodeJob } = await import("./lib/workers/geocode-worker");
+    const { handleAssignRouteGroup, handleOptimizeRoutes } = await import("./lib/workers/route-worker");
+    const { handleSendEmail, handleSendReminders } = await import("./lib/workers/email-worker");
 
     try {
-      const boss = await getQueue();
-      await boss.start();
-
-      registerGeocodeWorker(boss);
-      registerRouteWorkers(boss);
-      registerEmailWorkers(boss);
+      // Register job handlers
+      registerHandler(JOBS.GEOCODE_ADDRESS, handleGeocodeJob);
+      registerHandler(JOBS.ASSIGN_ROUTE_GROUP, handleAssignRouteGroup);
+      registerHandler(JOBS.OPTIMIZE_ROUTES, handleOptimizeRoutes);
+      registerHandler(JOBS.SEND_EMAIL, handleSendEmail);
+      registerHandler(JOBS.SEND_REMINDERS, handleSendReminders);
 
       // Schedule recurring jobs
-      await boss.schedule(JOBS.OPTIMIZE_ROUTES, "0 2 * * *", {}, {
-        tz: "America/Denver",
+      await scheduleRecurring(JOBS.OPTIMIZE_ROUTES, "0 2 * * *", {
+        timezone: "America/Denver",
       });
-      await boss.schedule(JOBS.SEND_REMINDERS, "0 8 * * *", {}, {
-        tz: "America/Denver",
+      await scheduleRecurring(JOBS.SEND_REMINDERS, "0 8 * * *", {
+        timezone: "America/Denver",
       });
 
-      console.log("pg-boss workers started successfully");
+      // Start job processing
+      startPolling(2000); // Poll every 2 seconds
+
+      console.log("Job queue workers started successfully");
     } catch (error) {
-      console.error("Failed to start pg-boss workers:", error);
+      console.error("Failed to start job queue workers:", error);
     }
   }
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { bookingUpdateSchema } from "@/lib/validation";
-import { getQueue, JOBS } from "@/lib/queue";
+import { scheduleJob, JOBS } from "@/lib/queue";
 
 export async function GET(
   _req: NextRequest,
@@ -132,9 +132,8 @@ export async function PATCH(
     // Queue route assignment if a date was selected
     if (parsed.data.availableDateId) {
       try {
-        const boss = await getQueue();
-        await boss.send(JOBS.ASSIGN_ROUTE_GROUP, { bookingId: updated.id });
-        await boss.send(JOBS.SEND_EMAIL, {
+        await scheduleJob(JOBS.ASSIGN_ROUTE_GROUP, { bookingId: updated.id });
+        await scheduleJob(JOBS.SEND_EMAIL, {
           bookingId: updated.id,
           emailType: "CONFIRMATION",
         });
@@ -146,8 +145,7 @@ export async function PATCH(
     // Queue cancellation email
     if (parsed.data.status === "CANCELLED") {
       try {
-        const boss = await getQueue();
-        await boss.send(JOBS.SEND_EMAIL, {
+        await scheduleJob(JOBS.SEND_EMAIL, {
           bookingId: updated.id,
           emailType: "CANCELLATION",
         });
