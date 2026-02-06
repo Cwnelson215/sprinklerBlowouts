@@ -147,7 +147,7 @@ jobs:
             --overrides '{
               "containerOverrides": [{
                 "name": "'"$APP_NAME"'",
-                "command": ["sh", "-c", "export DATABASE_URL=\"postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}\" && node node_modules/prisma/build/index.js migrate deploy"]
+                "command": ["sh", "-c", "ENCODED_PASS=$(node -e \"console.log(encodeURIComponent(process.env.DB_PASSWORD))\") && export DATABASE_URL=\"postgresql://${DB_USER}:${ENCODED_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}\" && node node_modules/prisma/build/index.js migrate deploy"]
               }]
             }' \
             --query 'tasks[0].taskArn' \
