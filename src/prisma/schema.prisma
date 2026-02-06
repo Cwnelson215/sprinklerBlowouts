@@ -82,7 +82,6 @@ model Booking {
   routeGroup    RouteGroup?    @relation(fields: [routeGroupId], references: [id])
   emailLogs     EmailLog[]
 
-  @@index([jobNumber])
   @@index([status])
   @@index([zoneId])
   @@map("bookings")
