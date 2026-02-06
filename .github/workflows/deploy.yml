@@ -130,9 +130,11 @@ jobs:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
         run: |
           CLUSTER="portfolio-${ENVIRONMENT}-cluster"
+          STACK="${{ github.event.inputs.environment || 'dev' }}"
 
-          # Get the current task definition
-          TASK_DEF=$(aws ecs describe-services --cluster $CLUSTER --services $APP_NAME --query 'services[0].taskDefinition' --output text)
+          # Get the migration task definition from Pulumi outputs
+          MIGRATION_TASK_DEF=$(pulumi stack output migrationTaskDefinitionArn --stack "$STACK")
+          echo "Using migration task definition: $MIGRATION_TASK_DEF"
 
           # Get network configuration from the running service
           SUBNETS=$(aws ecs describe-services --cluster $CLUSTER --services $APP_NAME --query 'services[0].networkConfiguration.awsvpcConfiguration.subnets' --output text | tr '\t' ',')
@@ -141,15 +143,9 @@ jobs:
           echo "Running migration task..."
           TASK_ARN=$(aws ecs run-task \
             --cluster $CLUSTER \
-            --task-definition $TASK_DEF \
+            --task-definition "$MIGRATION_TASK_DEF" \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUPS],assignPublicIp=ENABLED}" \
-            --overrides '{
-              "containerOverrides": [{
-                "name": "'"$APP_NAME"'",
-                "command": ["/app/migrate.sh"]
-              }]
-            }' \
             --query 'tasks[0].taskArn' \
             --output text)
 
@@ -165,7 +161,7 @@ jobs:
 
           if [ "$EXIT_CODE" != "0" ]; then
             echo "Migration failed! Fetching logs..."
-            aws logs tail /ecs/portfolio-${ENVIRONMENT} --filter-pattern "$APP_NAME" --since 5m || true
+            aws logs tail /ecs/portfolio-${ENVIRONMENT} --filter-pattern "$APP_NAME-migration" --since 5m || true
             exit 1
           fi
 

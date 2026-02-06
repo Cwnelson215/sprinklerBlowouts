@@ -296,6 +296,66 @@ const taskDefinition = new aws.ecs.TaskDefinition(`${appName}-task`, {
 });
 
 // =============================================================================
+// Migration Task Definition (no health check)
+// =============================================================================
+
+const migrationTaskDefinition = new aws.ecs.TaskDefinition(`${appName}-migration-task`, {
+  family: `${appName}-migration`,
+  cpu: cpu.toString(),
+  memory: memory.toString(),
+  networkMode: "awsvpc",
+  requiresCompatibilities: ["FARGATE"],
+  executionRoleArn: taskExecutionRoleArn,
+  taskRoleArn: taskRoleArn,
+  containerDefinitions: pulumi
+    .all([ecrRepo.repositoryUrl, logGroupName, region, dbEndpoint, dbPasswordSecretArn, jwtSecret, domainName])
+    .apply(([repoUrl, logGroup, awsRegion, dbHost, dbSecretArn, jwtSecretValue, domain]) => {
+      const env = [...containerEnv];
+      const secrets: { name: string; valueFrom: string }[] = [];
+
+      // Add database config if available
+      if (dbHost) {
+        const host = dbHost.split(":")[0];
+        env.push({ name: "DB_HOST", value: host });
+        env.push({ name: "DB_PORT", value: "5432" });
+        env.push({ name: "DB_NAME", value: appName.replace(/-/g, "_") });
+        env.push({ name: "DB_USER", value: "portfolio_admin" });
+        env.push({ name: "DATABASE_URL_HOST", value: host });
+      }
+      if (dbSecretArn) {
+        secrets.push({ name: "DB_PASSWORD", valueFrom: dbSecretArn });
+      }
+
+      // App-specific env vars
+      env.push({ name: "JWT_SECRET", value: jwtSecretValue });
+      env.push({ name: "EMAIL_DOMAIN", value: emailDomain || domain });
+      env.push({ name: "NEXT_PUBLIC_APP_URL", value: `https://${subdomain}.${domain}` });
+      env.push({ name: "AWS_REGION", value: awsRegion });
+
+      return JSON.stringify([
+        {
+          name: `${appName}-migration`,
+          image: `${repoUrl}:latest`,
+          essential: true,
+          command: ["/app/migrate.sh"],
+          environment: env,
+          secrets: secrets.length > 0 ? secrets : undefined,
+          logConfiguration: {
+            logDriver: "awslogs",
+            options: {
+              "awslogs-group": logGroup,
+              "awslogs-region": awsRegion,
+              "awslogs-stream-prefix": `${appName}-migration`,
+            },
+          },
+          // No health check - migration tasks don't run a web server
+        },
+      ]);
+    }),
+  tags,
+});
+
+// =============================================================================
 // ECS Service
 // =============================================================================
 
@@ -391,3 +451,4 @@ export const albUrl = pulumi.interpolate`http://${albDnsName}`;
 export const ecrRepositoryUrl = ecrRepo.repositoryUrl;
 export const serviceName = service.name;
 export const serviceArn = service.id;
+export const migrationTaskDefinitionArn = migrationTaskDefinition.arn;
