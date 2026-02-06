@@ -147,7 +147,7 @@ jobs:
             --overrides '{
               "containerOverrides": [{
                 "name": "'"$APP_NAME"'",
-                "command": ["sh", "-c", "npm install prisma@5.14.0 --no-save && npx prisma migrate deploy"]
+                "command": ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
               }]
             }' \
             --query 'tasks[0].taskArn' \

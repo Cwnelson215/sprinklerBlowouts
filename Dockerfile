@@ -34,6 +34,7 @@ COPY --from=builder /app/public ./public
 # Copy Prisma files for migrations
 COPY --from=deps /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=deps /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=deps /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/prisma ./prisma
 
 USER nextjs
