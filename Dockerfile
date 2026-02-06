@@ -37,6 +37,9 @@ COPY --from=deps /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=deps /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/prisma ./prisma
 
+# Fix permissions for Prisma migrations
+RUN chown -R nextjs:nodejs node_modules/.prisma node_modules/@prisma node_modules/prisma prisma
+
 USER nextjs
 
 EXPOSE 3000
