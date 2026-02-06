@@ -284,6 +284,7 @@ const service = new aws.ecs.Service(`${appName}-service`, {
   cluster: clusterArn,
   taskDefinition: taskDefinition.arn,
   desiredCount: desiredCount,
+  enableExecuteCommand: true,
   launchType: useFargateSpot ? undefined : "FARGATE",
   capacityProviderStrategies: useFargateSpot
     ? [
