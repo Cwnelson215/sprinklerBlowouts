@@ -24,8 +24,11 @@ const scheduleTimezone = config.get("scheduleTimezone") || "America/Denver";
 
 // App-specific secrets/config
 const jwtSecret = config.requireSecret("jwtSecret");
-const mongodbUri = config.requireSecret("mongodbUri");
 const emailDomain = config.get("emailDomain") || "";
+
+// MongoDB URI from AWS Secrets Manager (shared across apps)
+const mongodbSecret = aws.secretsmanager.getSecret({ name: "mongodb/atlas/uri" });
+const mongodbSecretArn = mongodbSecret.then(s => s.arn);
 
 // =============================================================================
 // Import Platform Stack Outputs
@@ -218,6 +221,21 @@ const ssmPolicy = new aws.iam.RolePolicy(`${appName}-ssm-policy`, {
   }),
 });
 
+// Secrets Manager permissions for task execution role (to inject secrets at startup)
+const secretsPolicy = new aws.iam.RolePolicy(`${appName}-secrets-policy`, {
+  role: taskExecutionRoleArn.apply(arn => arn.split("/").pop()!),
+  policy: pulumi.output(mongodbSecretArn).apply(arn => JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Action: ["secretsmanager:GetSecretValue"],
+        Resource: arn,
+      },
+    ],
+  })),
+});
+
 // Build environment variables
 const containerEnv = [
   { name: "NODE_ENV", value: "production" },
@@ -234,13 +252,12 @@ const taskDefinition = new aws.ecs.TaskDefinition(`${appName}-task`, {
   executionRoleArn: taskExecutionRoleArn,
   taskRoleArn: taskRoleArn,
   containerDefinitions: pulumi
-    .all([ecrRepo.repositoryUrl, logGroupName, region, jwtSecret, mongodbUri, domainName])
-    .apply(([repoUrl, logGroup, awsRegion, jwtSecretValue, mongoUri, domain]) => {
+    .all([ecrRepo.repositoryUrl, logGroupName, region, jwtSecret, mongodbSecretArn, domainName])
+    .apply(([repoUrl, logGroup, awsRegion, jwtSecretValue, mongoSecretArn, domain]) => {
       const env = [...containerEnv];
 
       // App-specific env vars
       env.push({ name: "JWT_SECRET", value: jwtSecretValue });
-      env.push({ name: "MONGODB_URI", value: mongoUri });
       env.push({ name: "EMAIL_DOMAIN", value: emailDomain || domain });
       env.push({ name: "NEXT_PUBLIC_APP_URL", value: `https://${subdomain}.${domain}` });
       env.push({ name: "AWS_REGION", value: awsRegion });
@@ -257,6 +274,12 @@ const taskDefinition = new aws.ecs.TaskDefinition(`${appName}-task`, {
             },
           ],
           environment: env,
+          secrets: [
+            {
+              name: "MONGODB_URI",
+              valueFrom: mongoSecretArn,
+            },
+          ],
           logConfiguration: {
             logDriver: "awslogs",
             options: {
