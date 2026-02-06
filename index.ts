@@ -200,6 +200,26 @@ const sesPolicy = new aws.iam.RolePolicy(`${appName}-ses-policy`, {
   }),
 });
 
+// SSM permissions for ECS Exec
+const ssmPolicy = new aws.iam.RolePolicy(`${appName}-ssm-policy`, {
+  role: taskRoleArn.apply(arn => arn.split("/").pop()!),
+  policy: JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Action: [
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel",
+        ],
+        Resource: "*",
+      },
+    ],
+  }),
+});
+
 // Build environment variables
 const containerEnv = [
   { name: "NODE_ENV", value: "production" },
