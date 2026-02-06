@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { ObjectId } from "mongodb";
+import { getDb } from "@/lib/mongodb";
 import { bookingUpdateSchema } from "@/lib/validation";
 import { scheduleJob, JOBS } from "@/lib/queue";
+import { Booking, AvailableDate, ServiceZone } from "@/lib/types";
 
 export async function GET(
   _req: NextRequest,
@@ -9,19 +11,30 @@ export async function GET(
 ) {
   try {
     const { jobNumber } = await params;
-    const booking = await prisma.booking.findUnique({
-      where: { jobNumber },
-      include: {
-        availableDate: true,
-        zone: { select: { name: true } },
-      },
-    });
+    const db = await getDb();
+
+    const booking = await db.collection<Booking>("bookings").findOne({ jobNumber });
 
     if (!booking) {
       return NextResponse.json(
         { error: "Booking not found" },
         { status: 404 }
       );
+    }
+
+    let availableDate: AvailableDate | null = null;
+    let zone: ServiceZone | null = null;
+
+    if (booking.availableDateId) {
+      availableDate = await db.collection<AvailableDate>("available_dates").findOne({
+        _id: booking.availableDateId,
+      });
+    }
+
+    if (booking.zoneId) {
+      zone = await db.collection<ServiceZone>("service_zones").findOne({
+        _id: booking.zoneId,
+      });
     }
 
     return NextResponse.json({
@@ -36,9 +49,9 @@ export async function GET(
       preferredTime: booking.preferredTime,
       status: booking.status,
       notes: booking.notes,
-      zoneName: booking.zone?.name,
-      scheduledDate: booking.availableDate?.date,
-      scheduledTime: booking.availableDate?.timeOfDay,
+      zoneName: zone?.name,
+      scheduledDate: availableDate?.date,
+      scheduledTime: availableDate?.timeOfDay,
       createdAt: booking.createdAt,
       updatedAt: booking.updatedAt,
     });
@@ -67,9 +80,10 @@ export async function PATCH(
       );
     }
 
-    const booking = await prisma.booking.findUnique({
-      where: { jobNumber },
-    });
+    const db = await getDb();
+    const bookings = db.collection<Booking>("bookings");
+
+    const booking = await bookings.findOne({ jobNumber });
 
     if (!booking) {
       return NextResponse.json(
@@ -85,7 +99,9 @@ export async function PATCH(
       );
     }
 
-    const updateData: Record<string, unknown> = {};
+    const updateData: Record<string, unknown> = {
+      updatedAt: new Date(),
+    };
 
     if (parsed.data.customerName) updateData.customerName = parsed.data.customerName;
     if (parsed.data.customerEmail) updateData.customerEmail = parsed.data.customerEmail;
@@ -101,9 +117,9 @@ export async function PATCH(
 
     if (parsed.data.availableDateId) {
       // Verify the available date exists and has capacity
-      const availableDate = await prisma.availableDate.findUnique({
-        where: { id: parsed.data.availableDateId },
-        include: { _count: { select: { bookings: true } } },
+      const availableDateId = new ObjectId(parsed.data.availableDateId);
+      const availableDate = await db.collection<AvailableDate>("available_dates").findOne({
+        _id: availableDateId,
       });
 
       if (!availableDate) {
@@ -113,28 +129,30 @@ export async function PATCH(
         );
       }
 
-      if (availableDate._count.bookings >= availableDate.maxBookings) {
+      const bookingCount = await bookings.countDocuments({
+        availableDateId: availableDateId,
+      });
+
+      if (bookingCount >= availableDate.maxBookings) {
         return NextResponse.json(
           { error: "Selected date is full" },
           { status: 400 }
         );
       }
 
-      updateData.availableDateId = parsed.data.availableDateId;
+      updateData.availableDateId = availableDateId;
       updateData.status = "SCHEDULED";
     }
 
-    const updated = await prisma.booking.update({
-      where: { jobNumber },
-      data: updateData,
-    });
+    await bookings.updateOne({ jobNumber }, { $set: updateData });
+    const updated = await bookings.findOne({ jobNumber });
 
     // Queue route assignment if a date was selected
-    if (parsed.data.availableDateId) {
+    if (parsed.data.availableDateId && updated) {
       try {
-        await scheduleJob(JOBS.ASSIGN_ROUTE_GROUP, { bookingId: updated.id });
+        await scheduleJob(JOBS.ASSIGN_ROUTE_GROUP, { bookingId: updated._id.toHexString() });
         await scheduleJob(JOBS.SEND_EMAIL, {
-          bookingId: updated.id,
+          bookingId: updated._id.toHexString(),
           emailType: "CONFIRMATION",
         });
       } catch (err) {
@@ -143,10 +161,10 @@ export async function PATCH(
     }
 
     // Queue cancellation email
-    if (parsed.data.status === "CANCELLED") {
+    if (parsed.data.status === "CANCELLED" && updated) {
       try {
         await scheduleJob(JOBS.SEND_EMAIL, {
-          bookingId: updated.id,
+          bookingId: updated._id.toHexString(),
           emailType: "CANCELLATION",
         });
       } catch (err) {
@@ -155,8 +173,8 @@ export async function PATCH(
     }
 
     return NextResponse.json({
-      jobNumber: updated.jobNumber,
-      status: updated.status,
+      jobNumber: updated?.jobNumber,
+      status: updated?.status,
     });
   } catch (error) {
     console.error("Error updating booking:", error);

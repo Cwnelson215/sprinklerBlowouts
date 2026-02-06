@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { ObjectId } from "mongodb";
+import { getDb } from "@/lib/mongodb";
 import { haversineDistance } from "@/lib/utils";
+import { ServiceZone, AvailableDate, Booking } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
   try {
@@ -10,15 +12,17 @@ export async function GET(req: NextRequest) {
     const timeOfDay = searchParams.get("timeOfDay");
     const zoneId = searchParams.get("zoneId");
 
+    const db = await getDb();
+
     // Find matching zone either by ID or by coordinates
-    let matchedZoneId: string | null = zoneId;
+    let matchedZoneId: ObjectId | null = zoneId ? new ObjectId(zoneId) : null;
 
     if (!matchedZoneId && !isNaN(lat) && !isNaN(lng)) {
-      const zones = await prisma.serviceZone.findMany({
-        where: { isActive: true },
-      });
+      const zones = await db.collection<ServiceZone>("service_zones")
+        .find({ isActive: true })
+        .toArray();
 
-      let nearestZone: (typeof zones)[0] | null = null;
+      let nearestZone: ServiceZone | null = null;
       let nearestDistance = Infinity;
 
       for (const zone of zones) {
@@ -29,7 +33,7 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      matchedZoneId = nearestZone?.id ?? null;
+      matchedZoneId = nearestZone?._id ?? null;
     }
 
     if (!matchedZoneId) {
@@ -39,35 +43,47 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const where: Record<string, unknown> = {
+    const query: Record<string, unknown> = {
       zoneId: matchedZoneId,
-      date: { gte: new Date() },
+      date: { $gte: new Date() },
     };
 
     if (timeOfDay) {
-      where.timeOfDay = timeOfDay;
+      query.timeOfDay = timeOfDay;
     }
 
-    const dates = await prisma.availableDate.findMany({
-      where,
-      include: {
-        _count: { select: { bookings: true } },
-        zone: { select: { name: true } },
-      },
-      orderBy: { date: "asc" },
+    const dates = await db.collection<AvailableDate>("available_dates")
+      .find(query)
+      .sort({ date: 1 })
+      .toArray();
+
+    // Get booking counts for each date
+    const available = await Promise.all(
+      dates.map(async (d) => {
+        const bookingCount = await db.collection<Booking>("bookings").countDocuments({
+          availableDateId: d._id,
+        });
+
+        const zone = await db.collection<ServiceZone>("service_zones").findOne({
+          _id: d.zoneId,
+        });
+
+        if (bookingCount >= d.maxBookings) return null;
+
+        return {
+          id: d._id.toHexString(),
+          date: d.date,
+          timeOfDay: d.timeOfDay,
+          zoneName: zone?.name,
+          spotsRemaining: d.maxBookings - bookingCount,
+        };
+      })
+    );
+
+    return NextResponse.json({
+      zoneId: matchedZoneId.toHexString(),
+      dates: available.filter(Boolean),
     });
-
-    const available = dates
-      .filter((d) => d._count.bookings < d.maxBookings)
-      .map((d) => ({
-        id: d.id,
-        date: d.date,
-        timeOfDay: d.timeOfDay,
-        zoneName: d.zone.name,
-        spotsRemaining: d.maxBookings - d._count.bookings,
-      }));
-
-    return NextResponse.json({ zoneId: matchedZoneId, dates: available });
   } catch (error) {
     console.error("Error fetching availability:", error);
     return NextResponse.json(

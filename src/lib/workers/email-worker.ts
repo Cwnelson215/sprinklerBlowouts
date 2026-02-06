@@ -1,4 +1,5 @@
-import { prisma } from "../prisma";
+import { ObjectId } from "mongodb";
+import { getDb } from "../mongodb";
 import { sendEmail } from "../email/ses";
 import {
   confirmationEmail,
@@ -7,7 +8,7 @@ import {
   cancellationEmail,
 } from "../email/templates";
 import { scheduleJob, JOBS } from "../queue";
-import { EmailType } from "@prisma/client";
+import { Booking, AvailableDate, EmailLog, EmailType } from "../types";
 
 interface SendEmailData {
   bookingId: string;
@@ -23,15 +24,22 @@ interface SendRemindersData {
 
 export async function handleSendEmail(data: SendEmailData) {
   const { bookingId, emailType, updateDescription } = data;
+  const db = await getDb();
 
-  const booking = await prisma.booking.findUnique({
-    where: { id: bookingId },
-    include: { availableDate: true },
+  const booking = await db.collection<Booking>("bookings").findOne({
+    _id: new ObjectId(bookingId),
   });
 
   if (!booking) {
     console.error(`Booking ${bookingId} not found for email`);
     return;
+  }
+
+  let availableDate: AvailableDate | null = null;
+  if (booking.availableDateId) {
+    availableDate = await db.collection<AvailableDate>("available_dates").findOne({
+      _id: booking.availableDateId,
+    });
   }
 
   const info = {
@@ -41,15 +49,15 @@ export async function handleSendEmail(data: SendEmailData) {
     city: booking.city,
     state: booking.state,
     zip: booking.zip,
-    date: booking.availableDate
-      ? booking.availableDate.date.toLocaleDateString("en-US", {
+    date: availableDate
+      ? availableDate.date.toLocaleDateString("en-US", {
           weekday: "long",
           year: "numeric",
           month: "long",
           day: "numeric",
         })
       : undefined,
-    timeOfDay: booking.availableDate?.timeOfDay,
+    timeOfDay: availableDate?.timeOfDay,
   };
 
   let email: { subject: string; html: string };
@@ -76,12 +84,14 @@ export async function handleSendEmail(data: SendEmailData) {
     to: booking.customerEmail,
     subject: email.subject,
     html: email.html,
-    bookingId: booking.id,
+    bookingId: booking._id.toHexString(),
     emailType,
   });
 }
 
 export async function handleSendReminders(_data: SendRemindersData) {
+  const db = await getDb();
+
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   tomorrow.setHours(0, 0, 0, 0);
@@ -89,29 +99,33 @@ export async function handleSendReminders(_data: SendRemindersData) {
   const dayAfter = new Date(tomorrow);
   dayAfter.setDate(dayAfter.getDate() + 1);
 
-  const bookings = await prisma.booking.findMany({
-    where: {
-      status: { in: ["SCHEDULED", "CONFIRMED"] },
-      availableDate: {
-        date: { gte: tomorrow, lt: dayAfter },
-      },
-    },
-    include: { availableDate: true },
-  });
+  // Get available dates for tomorrow
+  const availableDates = await db.collection<AvailableDate>("available_dates")
+    .find({
+      date: { $gte: tomorrow, $lt: dayAfter },
+    })
+    .toArray();
+
+  const availableDateIds = availableDates.map((d) => d._id);
+
+  const bookings = await db.collection<Booking>("bookings")
+    .find({
+      status: { $in: ["SCHEDULED", "CONFIRMED"] },
+      availableDateId: { $in: availableDateIds },
+    })
+    .toArray();
 
   for (const booking of bookings) {
     // Check if reminder already sent
-    const existingReminder = await prisma.emailLog.findFirst({
-      where: {
-        bookingId: booking.id,
-        emailType: "REMINDER",
-        sentAt: { gte: tomorrow },
-      },
+    const existingReminder = await db.collection<EmailLog>("email_logs").findOne({
+      bookingId: booking._id,
+      emailType: "REMINDER",
+      sentAt: { $gte: tomorrow },
     });
 
     if (!existingReminder) {
       await scheduleJob(JOBS.SEND_EMAIL, {
-        bookingId: booking.id,
+        bookingId: booking._id.toHexString(),
         emailType: "REMINDER" as EmailType,
       });
     }

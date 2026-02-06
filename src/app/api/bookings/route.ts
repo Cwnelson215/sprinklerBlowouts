@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getDb } from "@/lib/mongodb";
 import { bookingSchema } from "@/lib/validation";
 import { generateJobNumber } from "@/lib/utils";
 import { scheduleJob, JOBS } from "@/lib/queue";
+import { Booking } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,13 +18,15 @@ export async function POST(req: NextRequest) {
     }
 
     const data = parsed.data;
+    const db = await getDb();
+    const bookings = db.collection<Booking>("bookings");
 
     // Generate unique job number
     let jobNumber: string;
     let attempts = 0;
     do {
       jobNumber = generateJobNumber();
-      const existing = await prisma.booking.findUnique({ where: { jobNumber } });
+      const existing = await bookings.findOne({ jobNumber });
       if (!existing) break;
       attempts++;
     } while (attempts < 10);
@@ -35,34 +38,44 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const booking = await prisma.booking.create({
-      data: {
-        jobNumber,
-        customerName: data.customerName,
-        customerEmail: data.customerEmail,
-        customerPhone: data.customerPhone,
-        address: data.address,
-        city: data.city,
-        state: data.state,
-        zip: data.zip,
-        preferredTime: data.preferredTime,
-        notes: data.notes,
-        status: "PENDING",
-      },
-    });
+    const now = new Date();
+    const bookingDoc = {
+      jobNumber,
+      customerName: data.customerName,
+      customerEmail: data.customerEmail,
+      customerPhone: data.customerPhone || null,
+      address: data.address,
+      city: data.city,
+      state: data.state,
+      zip: data.zip,
+      preferredTime: data.preferredTime,
+      notes: data.notes || null,
+      status: "PENDING",
+      lat: null,
+      lng: null,
+      zoneId: null,
+      availableDateId: null,
+      routeGroupId: null,
+      routeOrder: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const result = await db.collection("bookings").insertOne(bookingDoc);
+    const bookingId = result.insertedId.toHexString();
 
     // Queue geocoding job
     try {
-      await scheduleJob(JOBS.GEOCODE_ADDRESS, { bookingId: booking.id });
+      await scheduleJob(JOBS.GEOCODE_ADDRESS, { bookingId });
     } catch (err) {
       console.error("Failed to queue geocode job:", err);
     }
 
     return NextResponse.json(
       {
-        jobNumber: booking.jobNumber,
-        status: booking.status,
-        id: booking.id,
+        jobNumber: bookingDoc.jobNumber,
+        status: bookingDoc.status,
+        id: bookingId,
       },
       { status: 201 }
     );

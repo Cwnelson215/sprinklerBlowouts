@@ -3,8 +3,6 @@ FROM node:20-alpine AS deps
 WORKDIR /app
 COPY src/package.json src/package-lock.json* ./
 RUN npm ci --only=production && npm cache clean --force
-COPY src/prisma ./prisma
-RUN npx prisma generate
 
 # Stage 2: Build
 FROM node:20-alpine AS builder
@@ -12,7 +10,6 @@ WORKDIR /app
 COPY src/package.json src/package-lock.json* ./
 RUN npm ci
 COPY src/ .
-RUN npx prisma generate
 RUN npm run build
 
 # Stage 3: Production
@@ -30,10 +27,6 @@ RUN apk add --no-cache curl
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-
-# Copy Prisma client
-COPY --from=deps /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=deps /app/node_modules/@prisma ./node_modules/@prisma
 
 USER nextjs
 

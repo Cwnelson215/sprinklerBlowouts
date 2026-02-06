@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { ObjectId } from "mongodb";
+import { getDb } from "@/lib/mongodb";
 import { getAdminFromRequest } from "@/lib/auth";
-import { BookingStatus } from "@prisma/client";
+import { Booking, ServiceZone, AvailableDate, BookingStatus } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromRequest(req);
@@ -17,34 +18,61 @@ export async function GET(req: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
 
-    const where: Record<string, unknown> = {};
-    if (status) where.status = status;
-    if (zoneId) where.zoneId = zoneId;
+    const db = await getDb();
+    const query: Record<string, unknown> = {};
+
+    if (status) query.status = status;
+    if (zoneId) query.zoneId = new ObjectId(zoneId);
     if (search) {
-      where.OR = [
-        { jobNumber: { contains: search, mode: "insensitive" } },
-        { customerName: { contains: search, mode: "insensitive" } },
-        { customerEmail: { contains: search, mode: "insensitive" } },
-        { address: { contains: search, mode: "insensitive" } },
+      query.$or = [
+        { jobNumber: { $regex: search, $options: "i" } },
+        { customerName: { $regex: search, $options: "i" } },
+        { customerEmail: { $regex: search, $options: "i" } },
+        { address: { $regex: search, $options: "i" } },
       ];
     }
 
     const [bookings, total] = await Promise.all([
-      prisma.booking.findMany({
-        where,
-        include: {
-          zone: { select: { name: true } },
-          availableDate: { select: { date: true, timeOfDay: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.booking.count({ where }),
+      db.collection<Booking>("bookings")
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .toArray(),
+      db.collection<Booking>("bookings").countDocuments(query),
     ]);
 
+    // Populate zone and availableDate info
+    const enrichedBookings = await Promise.all(
+      bookings.map(async (booking) => {
+        let zone: ServiceZone | null = null;
+        let availableDate: AvailableDate | null = null;
+
+        if (booking.zoneId) {
+          zone = await db.collection<ServiceZone>("service_zones").findOne({
+            _id: booking.zoneId,
+          });
+        }
+
+        if (booking.availableDateId) {
+          availableDate = await db.collection<AvailableDate>("available_dates").findOne({
+            _id: booking.availableDateId,
+          });
+        }
+
+        return {
+          ...booking,
+          id: booking._id.toHexString(),
+          zone: zone ? { name: zone.name } : null,
+          availableDate: availableDate
+            ? { date: availableDate.date, timeOfDay: availableDate.timeOfDay }
+            : null,
+        };
+      })
+    );
+
     return NextResponse.json({
-      bookings,
+      bookings: enrichedBookings,
       pagination: {
         page,
         limit,
@@ -78,12 +106,18 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const booking = await prisma.booking.update({
-      where: { id },
-      data: { status },
-    });
+    const db = await getDb();
+    const result = await db.collection<Booking>("bookings").findOneAndUpdate(
+      { _id: new ObjectId(id) },
+      { $set: { status, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
 
-    return NextResponse.json(booking);
+    if (!result) {
+      return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ ...result, id: result._id.toHexString() });
   } catch (error) {
     console.error("Admin booking update error:", error);
     return NextResponse.json(
@@ -107,7 +141,9 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
-    await prisma.booking.delete({ where: { id } });
+    const db = await getDb();
+    await db.collection<Booking>("bookings").deleteOne({ _id: new ObjectId(id) });
+
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Admin booking delete error:", error);

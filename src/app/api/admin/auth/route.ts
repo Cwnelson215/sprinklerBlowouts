@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { compare, hash } from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { getDb } from "@/lib/mongodb";
 import { adminLoginSchema } from "@/lib/validation";
 import { signToken, setAuthCookie, clearAuthCookie } from "@/lib/auth";
+import { AdminUser } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,8 +17,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const admin = await prisma.adminUser.findUnique({
-      where: { email: parsed.data.email },
+    const db = await getDb();
+    const admin = await db.collection<AdminUser>("admin_users").findOne({
+      email: parsed.data.email,
     });
 
     if (!admin) {
@@ -36,7 +38,7 @@ export async function POST(req: NextRequest) {
     }
 
     const token = await signToken({
-      id: admin.id,
+      id: admin._id.toHexString(),
       email: admin.email,
       role: admin.role,
     });
@@ -64,7 +66,9 @@ export async function DELETE() {
 // Seed endpoint - creates initial admin if none exist
 export async function PUT(req: NextRequest) {
   try {
-    const count = await prisma.adminUser.count();
+    const db = await getDb();
+    const count = await db.collection<AdminUser>("admin_users").countDocuments();
+
     if (count > 0) {
       return NextResponse.json(
         { error: "Admin users already exist" },
@@ -83,17 +87,18 @@ export async function PUT(req: NextRequest) {
     }
 
     const passwordHash = await hash(parsed.data.password, 12);
+    const now = new Date();
 
-    const admin = await prisma.adminUser.create({
-      data: {
-        email: parsed.data.email,
-        passwordHash,
-        role: "SUPER_ADMIN",
-      },
+    const result = await db.collection("admin_users").insertOne({
+      email: parsed.data.email,
+      passwordHash,
+      role: "SUPER_ADMIN",
+      createdAt: now,
+      updatedAt: now,
     });
 
     return NextResponse.json(
-      { email: admin.email, role: admin.role },
+      { email: parsed.data.email, role: "SUPER_ADMIN" },
       { status: 201 }
     );
   } catch (error) {

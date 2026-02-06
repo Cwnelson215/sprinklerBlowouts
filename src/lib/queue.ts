@@ -1,5 +1,6 @@
-import { prisma } from "./prisma";
-import { JobStatus } from "@prisma/client";
+import { ObjectId } from "mongodb";
+import { getDb } from "./mongodb";
+import { Job, JobStatus } from "./types";
 
 // Job names
 export const JOBS = {
@@ -30,15 +31,20 @@ export async function scheduleJob<T extends object>(
   data: T,
   options?: { runAt?: Date; priority?: number; maxAttempts?: number }
 ) {
-  return prisma.job.create({
-    data: {
-      name,
-      data: data as object,
-      runAt: options?.runAt ?? new Date(),
-      priority: options?.priority ?? 0,
-      maxAttempts: options?.maxAttempts ?? 3,
-    },
-  });
+  const db = await getDb();
+  const now = new Date();
+  const job: Omit<Job, "_id"> = {
+    name,
+    data,
+    status: "PENDING",
+    priority: options?.priority ?? 0,
+    attempts: 0,
+    maxAttempts: options?.maxAttempts ?? 3,
+    runAt: options?.runAt ?? now,
+    createdAt: now,
+  };
+  const result = await db.collection("jobs").insertOne(job);
+  return { ...job, _id: result.insertedId };
 }
 
 /**
@@ -49,25 +55,27 @@ export async function scheduleRecurring(
   cronExpression: string,
   options?: { timezone?: string }
 ) {
+  const db = await getDb();
   const nextRun = getNextCronRun(cronExpression, options?.timezone);
 
   // Check if there's already a pending job of this type scheduled for the future
-  const existing = await prisma.job.findFirst({
-    where: {
-      name,
-      status: "PENDING",
-      runAt: { gte: new Date() },
-    },
+  const existing = await db.collection<Job>("jobs").findOne({
+    name,
+    status: "PENDING",
+    runAt: { $gte: new Date() },
   });
 
   if (!existing) {
-    await prisma.job.create({
-      data: {
-        name,
-        data: { recurring: true, cron: cronExpression, timezone: options?.timezone },
-        runAt: nextRun,
-        priority: -1, // Lower priority for recurring jobs
-      },
+    const now = new Date();
+    await db.collection("jobs").insertOne({
+      name,
+      data: { recurring: true, cron: cronExpression, timezone: options?.timezone },
+      status: "PENDING",
+      priority: -1, // Lower priority for recurring jobs
+      attempts: 0,
+      maxAttempts: 3,
+      runAt: nextRun,
+      createdAt: now,
     });
     console.log(`Scheduled recurring job ${name} for ${nextRun.toISOString()}`);
   }
@@ -77,58 +85,55 @@ export async function scheduleRecurring(
  * Process pending jobs (call this in a polling loop)
  */
 export async function processJobs() {
+  const db = await getDb();
+  const jobs = db.collection<Job>("jobs");
   const now = new Date();
 
   // Find and claim a job atomically
-  const job = await prisma.job.findFirst({
-    where: {
+  const result = await jobs.findOneAndUpdate(
+    {
       status: "PENDING",
-      runAt: { lte: now },
+      runAt: { $lte: now },
     },
-    orderBy: [{ priority: "desc" }, { runAt: "asc" }],
-  });
+    {
+      $set: { status: "PROCESSING" as JobStatus },
+      $inc: { attempts: 1 },
+    },
+    {
+      sort: { priority: -1, runAt: 1 },
+      returnDocument: "after",
+    }
+  );
 
+  const job = result;
   if (!job) return false;
-
-  // Try to claim the job
-  const updated = await prisma.job.updateMany({
-    where: {
-      id: job.id,
-      status: "PENDING", // Only update if still pending (optimistic locking)
-    },
-    data: {
-      status: "PROCESSING",
-      attempts: { increment: 1 },
-    },
-  });
-
-  if (updated.count === 0) {
-    // Another worker claimed it
-    return true; // Return true to indicate there may be more jobs
-  }
 
   const handler = handlers.get(job.name);
   if (!handler) {
     console.error(`No handler registered for job type: ${job.name}`);
-    await prisma.job.update({
-      where: { id: job.id },
-      data: {
-        status: "FAILED",
-        lastError: `No handler registered for job type: ${job.name}`,
-      },
-    });
+    await jobs.updateOne(
+      { _id: job._id },
+      {
+        $set: {
+          status: "FAILED" as JobStatus,
+          lastError: `No handler registered for job type: ${job.name}`,
+        },
+      }
+    );
     return true;
   }
 
   try {
     await handler(job.data);
-    await prisma.job.update({
-      where: { id: job.id },
-      data: {
-        status: "COMPLETED",
-        completedAt: new Date(),
-      },
-    });
+    await jobs.updateOne(
+      { _id: job._id },
+      {
+        $set: {
+          status: "COMPLETED" as JobStatus,
+          completedAt: new Date(),
+        },
+      }
+    );
 
     // If this was a recurring job, schedule the next one
     const jobData = job.data as { recurring?: boolean; cron?: string; timezone?: string };
@@ -137,27 +142,31 @@ export async function processJobs() {
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`Job ${job.id} (${job.name}) failed:`, errorMessage);
+    console.error(`Job ${job._id} (${job.name}) failed:`, errorMessage);
 
-    if (job.attempts + 1 >= job.maxAttempts) {
-      await prisma.job.update({
-        where: { id: job.id },
-        data: {
-          status: "FAILED",
-          lastError: errorMessage,
-        },
-      });
+    if (job.attempts >= job.maxAttempts) {
+      await jobs.updateOne(
+        { _id: job._id },
+        {
+          $set: {
+            status: "FAILED" as JobStatus,
+            lastError: errorMessage,
+          },
+        }
+      );
     } else {
       // Retry with exponential backoff
-      const backoffMs = Math.min(1000 * Math.pow(2, job.attempts), 300000); // Max 5 min
-      await prisma.job.update({
-        where: { id: job.id },
-        data: {
-          status: "PENDING",
-          lastError: errorMessage,
-          runAt: new Date(Date.now() + backoffMs),
-        },
-      });
+      const backoffMs = Math.min(1000 * Math.pow(2, job.attempts - 1), 300000); // Max 5 min
+      await jobs.updateOne(
+        { _id: job._id },
+        {
+          $set: {
+            status: "PENDING" as JobStatus,
+            lastError: errorMessage,
+            runAt: new Date(Date.now() + backoffMs),
+          },
+        }
+      );
     }
   }
 

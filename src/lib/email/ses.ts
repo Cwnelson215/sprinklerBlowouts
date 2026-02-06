@@ -1,6 +1,7 @@
+import { ObjectId } from "mongodb";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
-import { prisma } from "../prisma";
-import { EmailType } from "@prisma/client";
+import { getDb } from "../mongodb";
+import { EmailType } from "../types";
 
 const ses = new SESClient({ region: process.env.AWS_REGION || "us-east-1" });
 const FROM_EMAIL = `noreply@${process.env.EMAIL_DOMAIN || "example.com"}`;
@@ -20,6 +21,8 @@ export async function sendEmail({
   bookingId,
   emailType,
 }: SendEmailParams): Promise<boolean> {
+  const db = await getDb();
+
   try {
     await ses.send(
       new SendEmailCommand({
@@ -32,22 +35,26 @@ export async function sendEmail({
       })
     );
 
-    await prisma.emailLog.create({
-      data: { bookingId, emailType, to, subject, success: true },
+    await db.collection("email_logs").insertOne({
+      bookingId: new ObjectId(bookingId),
+      emailType,
+      to,
+      subject,
+      success: true,
+      sentAt: new Date(),
     });
 
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    await prisma.emailLog.create({
-      data: {
-        bookingId,
-        emailType,
-        to,
-        subject,
-        success: false,
-        error: message,
-      },
+    await db.collection("email_logs").insertOne({
+      bookingId: new ObjectId(bookingId),
+      emailType,
+      to,
+      subject,
+      success: false,
+      error: message,
+      sentAt: new Date(),
     });
     console.error(`Failed to send ${emailType} email to ${to}:`, message);
     return false;

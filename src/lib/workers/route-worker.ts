@@ -1,7 +1,8 @@
-import { Prisma } from "@prisma/client";
-import { prisma } from "../prisma";
+import { ObjectId } from "mongodb";
+import { getDb } from "../mongodb";
 import { dbscan } from "../clustering";
 import { optimizeRoute } from "../route-optimizer";
+import { Booking, RouteGroup, AvailableDate } from "../types";
 
 interface AssignRouteGroupData {
   bookingId: string;
@@ -17,82 +18,106 @@ interface OptimizeRoutesData {
 
 export async function handleAssignRouteGroup(data: AssignRouteGroupData) {
   const { bookingId } = data;
+  const db = await getDb();
 
-  const booking = await prisma.booking.findUnique({
-    where: { id: bookingId },
-    include: { availableDate: true },
+  const booking = await db.collection<Booking>("bookings").findOne({
+    _id: new ObjectId(bookingId),
   });
 
-  if (!booking || !booking.availableDate || !booking.zoneId || !booking.lat || !booking.lng) {
+  if (!booking) {
+    console.error(`Cannot assign route group for booking ${bookingId}: not found`);
+    return;
+  }
+
+  let availableDate: AvailableDate | null = null;
+  if (booking.availableDateId) {
+    availableDate = await db.collection<AvailableDate>("available_dates").findOne({
+      _id: booking.availableDateId,
+    });
+  }
+
+  if (!availableDate || !booking.zoneId || !booking.lat || !booking.lng) {
     console.error(`Cannot assign route group for booking ${bookingId}: missing data`);
     return;
   }
 
   // Find or create a route group for this zone/date/time
-  let routeGroup = await prisma.routeGroup.findFirst({
-    where: {
-      zoneId: booking.zoneId,
-      date: booking.availableDate.date,
-      timeOfDay: booking.availableDate.timeOfDay,
-    },
+  let routeGroup = await db.collection<RouteGroup>("route_groups").findOne({
+    zoneId: booking.zoneId,
+    date: availableDate.date,
+    timeOfDay: availableDate.timeOfDay,
   });
 
   if (!routeGroup) {
-    routeGroup = await prisma.routeGroup.create({
-      data: {
-        zoneId: booking.zoneId,
-        date: booking.availableDate.date,
-        timeOfDay: booking.availableDate.timeOfDay,
-      },
+    const now = new Date();
+    const result = await db.collection("route_groups").insertOne({
+      zoneId: booking.zoneId,
+      date: availableDate.date,
+      timeOfDay: availableDate.timeOfDay,
+      houseCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    routeGroup = await db.collection<RouteGroup>("route_groups").findOne({
+      _id: result.insertedId,
     });
   }
 
-  await prisma.booking.update({
-    where: { id: bookingId },
-    data: {
-      routeGroupId: routeGroup.id,
-      status: "SCHEDULED",
-    },
-  });
+  if (!routeGroup) {
+    console.error(`Failed to create route group for booking ${bookingId}`);
+    return;
+  }
+
+  await db.collection<Booking>("bookings").updateOne(
+    { _id: new ObjectId(bookingId) },
+    {
+      $set: {
+        routeGroupId: routeGroup._id,
+        status: "SCHEDULED",
+        updatedAt: new Date(),
+      },
+    }
+  );
 
   // Update house count
-  const count = await prisma.booking.count({
-    where: { routeGroupId: routeGroup.id },
+  const count = await db.collection<Booking>("bookings").countDocuments({
+    routeGroupId: routeGroup._id,
   });
 
-  await prisma.routeGroup.update({
-    where: { id: routeGroup.id },
-    data: { houseCount: count },
-  });
+  await db.collection<RouteGroup>("route_groups").updateOne(
+    { _id: routeGroup._id },
+    { $set: { houseCount: count, updatedAt: new Date() } }
+  );
 
-  console.log(`Assigned booking ${booking.jobNumber} to route group ${routeGroup.id}`);
+  console.log(`Assigned booking ${booking.jobNumber} to route group ${routeGroup._id}`);
 }
 
 export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
   const { zoneId, date } = data;
+  const db = await getDb();
 
-  const where: Record<string, unknown> = {};
-  if (zoneId) where.zoneId = zoneId;
-  if (date) where.date = new Date(date);
+  const query: Record<string, unknown> = {};
+  if (zoneId) query.zoneId = new ObjectId(zoneId);
+  if (date) query.date = new Date(date);
 
-  const routeGroups = await prisma.routeGroup.findMany({
-    where,
-    include: {
-      bookings: {
-        where: {
-          lat: { not: null },
-          lng: { not: null },
-          status: { in: ["SCHEDULED", "CONFIRMED"] },
-        },
-      },
-    },
-  });
+  const routeGroups = await db.collection<RouteGroup>("route_groups")
+    .find(query)
+    .toArray();
 
   for (const group of routeGroups) {
-    if (group.bookings.length < 2) continue;
+    const bookings = await db.collection<Booking>("bookings")
+      .find({
+        routeGroupId: group._id,
+        lat: { $ne: null },
+        lng: { $ne: null },
+        status: { $in: ["SCHEDULED", "CONFIRMED"] },
+      })
+      .toArray();
 
-    const points = group.bookings.map((b) => ({
-      id: b.id,
+    if (bookings.length < 2) continue;
+
+    const points = bookings.map((b) => ({
+      id: b._id.toHexString(),
       lat: b.lat!,
       lng: b.lng!,
     }));
@@ -113,26 +138,29 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
 
     // Update route order on bookings
     for (let i = 0; i < optimized.order.length; i++) {
-      await prisma.booking.update({
-        where: { id: optimized.order[i] },
-        data: { routeOrder: i },
-      });
+      await db.collection<Booking>("bookings").updateOne(
+        { _id: new ObjectId(optimized.order[i]) },
+        { $set: { routeOrder: i, updatedAt: new Date() } }
+      );
     }
 
-    await prisma.routeGroup.update({
-      where: { id: group.id },
-      data: {
-        optimizedRoute: optimized as unknown as Prisma.InputJsonValue,
-        estimatedDistance: optimized.totalDistance,
-        // Rough estimate: 15 min per stop + drive time at 25 mph
-        estimatedDuration:
-          clusterPoints.length * 15 +
-          Math.round((optimized.totalDistance / 25) * 60),
-      },
-    });
+    await db.collection<RouteGroup>("route_groups").updateOne(
+      { _id: group._id },
+      {
+        $set: {
+          optimizedRoute: optimized,
+          estimatedDistance: optimized.totalDistance,
+          // Rough estimate: 15 min per stop + drive time at 25 mph
+          estimatedDuration:
+            clusterPoints.length * 15 +
+            Math.round((optimized.totalDistance / 25) * 60),
+          updatedAt: new Date(),
+        },
+      }
+    );
 
     console.log(
-      `Optimized route group ${group.id}: ${clusterPoints.length} stops, ${optimized.totalDistance} miles`
+      `Optimized route group ${group._id}: ${clusterPoints.length} stops, ${optimized.totalDistance} miles`
     );
   }
 }

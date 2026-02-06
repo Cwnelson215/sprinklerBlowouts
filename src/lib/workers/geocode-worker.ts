@@ -1,6 +1,8 @@
-import { prisma } from "../prisma";
+import { ObjectId } from "mongodb";
+import { getDb } from "../mongodb";
 import { geocodeAddress } from "../geocode";
 import { haversineDistance } from "../utils";
+import { Booking, ServiceZone } from "../types";
 
 interface GeocodeJobData {
   bookingId: string;
@@ -8,9 +10,10 @@ interface GeocodeJobData {
 
 export async function handleGeocodeJob(data: GeocodeJobData) {
   const { bookingId } = data;
+  const db = await getDb();
 
-  const booking = await prisma.booking.findUnique({
-    where: { id: bookingId },
+  const booking = await db.collection<Booking>("bookings").findOne({
+    _id: new ObjectId(bookingId),
   });
 
   if (!booking) {
@@ -33,11 +36,11 @@ export async function handleGeocodeJob(data: GeocodeJobData) {
   }
 
   // Find the nearest active zone
-  const zones = await prisma.serviceZone.findMany({
-    where: { isActive: true },
-  });
+  const zones = await db.collection<ServiceZone>("service_zones")
+    .find({ isActive: true })
+    .toArray();
 
-  let nearestZone: (typeof zones)[0] | null = null;
+  let nearestZone: ServiceZone | null = null;
   let nearestDistance = Infinity;
 
   for (const zone of zones) {
@@ -54,15 +57,18 @@ export async function handleGeocodeJob(data: GeocodeJobData) {
   }
 
   // Update booking with geocode results and zone assignment
-  await prisma.booking.update({
-    where: { id: bookingId },
-    data: {
-      lat: result.lat,
-      lng: result.lng,
-      zoneId: nearestZone?.id ?? null,
-      status: nearestZone ? "AWAITING_SCHEDULE" : "PENDING",
-    },
-  });
+  await db.collection<Booking>("bookings").updateOne(
+    { _id: new ObjectId(bookingId) },
+    {
+      $set: {
+        lat: result.lat,
+        lng: result.lng,
+        zoneId: nearestZone?._id ?? null,
+        status: nearestZone ? "AWAITING_SCHEDULE" : "PENDING",
+        updatedAt: new Date(),
+      },
+    }
+  );
 
   console.log(
     `Geocoded booking ${booking.jobNumber}: (${result.lat}, ${result.lng})` +

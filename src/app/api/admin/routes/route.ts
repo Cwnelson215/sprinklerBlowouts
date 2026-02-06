@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { ObjectId } from "mongodb";
+import { getDb } from "@/lib/mongodb";
 import { getAdminFromRequest } from "@/lib/auth";
 import { scheduleJob, JOBS } from "@/lib/queue";
+import { RouteGroup, ServiceZone, Booking } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromRequest(req);
@@ -14,32 +16,46 @@ export async function GET(req: NextRequest) {
     const zoneId = searchParams.get("zoneId");
     const date = searchParams.get("date");
 
-    const where: Record<string, unknown> = {};
-    if (zoneId) where.zoneId = zoneId;
-    if (date) where.date = new Date(date);
+    const db = await getDb();
+    const query: Record<string, unknown> = {};
+    if (zoneId) query.zoneId = new ObjectId(zoneId);
+    if (date) query.date = new Date(date);
 
-    const routes = await prisma.routeGroup.findMany({
-      where,
-      include: {
-        zone: { select: { name: true } },
-        bookings: {
-          select: {
-            id: true,
-            jobNumber: true,
-            customerName: true,
-            address: true,
-            lat: true,
-            lng: true,
-            routeOrder: true,
-            status: true,
-          },
-          orderBy: { routeOrder: "asc" },
-        },
-      },
-      orderBy: { date: "asc" },
-    });
+    const routes = await db.collection<RouteGroup>("route_groups")
+      .find(query)
+      .sort({ date: 1 })
+      .toArray();
 
-    return NextResponse.json(routes);
+    // Enrich with zone and bookings info
+    const enrichedRoutes = await Promise.all(
+      routes.map(async (route) => {
+        const [zone, bookings] = await Promise.all([
+          db.collection<ServiceZone>("service_zones").findOne({ _id: route.zoneId }),
+          db.collection<Booking>("bookings")
+            .find({ routeGroupId: route._id })
+            .sort({ routeOrder: 1 })
+            .toArray(),
+        ]);
+
+        return {
+          ...route,
+          id: route._id.toHexString(),
+          zone: zone ? { name: zone.name } : null,
+          bookings: bookings.map((b) => ({
+            id: b._id.toHexString(),
+            jobNumber: b.jobNumber,
+            customerName: b.customerName,
+            address: b.address,
+            lat: b.lat,
+            lng: b.lng,
+            routeOrder: b.routeOrder,
+            status: b.status,
+          })),
+        };
+      })
+    );
+
+    return NextResponse.json(enrichedRoutes);
   } catch (error) {
     console.error("Routes list error:", error);
     return NextResponse.json(
