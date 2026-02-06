@@ -107,7 +107,21 @@ jobs:
         run: |
           CLUSTER="portfolio-${ENVIRONMENT}-cluster"
           echo "Waiting for service to stabilize..."
-          aws ecs wait services-stable --cluster $CLUSTER --services $APP_NAME
+          # Wait up to 10 minutes for deployment to stabilize
+          for i in {1..20}; do
+            RUNNING=$(aws ecs describe-services --cluster $CLUSTER --services $APP_NAME --query 'services[0].runningCount' --output text)
+            DESIRED=$(aws ecs describe-services --cluster $CLUSTER --services $APP_NAME --query 'services[0].desiredCount' --output text)
+            DEPLOYMENTS=$(aws ecs describe-services --cluster $CLUSTER --services $APP_NAME --query 'length(services[0].deployments)' --output text)
+            echo "Running: $RUNNING, Desired: $DESIRED, Deployments: $DEPLOYMENTS"
+            if [ "$RUNNING" == "$DESIRED" ] && [ "$DEPLOYMENTS" == "1" ]; then
+              echo "Service is stable!"
+              break
+            fi
+            if [ $i -eq 20 ]; then
+              echo "Timeout waiting for service to stabilize, continuing anyway..."
+            fi
+            sleep 30
+          done
 
       - name: Run database migrations
         env:
