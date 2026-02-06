@@ -100,6 +100,28 @@ jobs:
             --service ${APP_NAME} \
             --force-new-deployment
 
+      - name: Wait for deployment and run migrations
+        env:
+          ENVIRONMENT: ${{ github.event.inputs.environment || 'dev' }}
+          APP_NAME: ${{ steps.app-info.outputs.app-name }}
+        run: |
+          CLUSTER="portfolio-${ENVIRONMENT}-cluster"
+
+          echo "Waiting for service to stabilize..."
+          aws ecs wait services-stable --cluster $CLUSTER --services $APP_NAME
+
+          echo "Getting task ID..."
+          TASK_ARN=$(aws ecs list-tasks --cluster $CLUSTER --service-name $APP_NAME --query 'taskArns[0]' --output text)
+          TASK_ID=$(echo $TASK_ARN | awk -F'/' '{print $NF}')
+
+          echo "Running database migrations in task $TASK_ID..."
+          aws ecs execute-command \
+            --cluster $CLUSTER \
+            --task $TASK_ID \
+            --container $APP_NAME \
+            --command "npm install prisma@5.14.0 --no-save && npx prisma migrate deploy" \
+            --non-interactive
+
       - name: Output App URL
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
