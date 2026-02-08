@@ -8,7 +8,7 @@ const SATURDAY = 6;
 const SUNDAY = 0;
 
 function isValidDayForTimeSlot(date: Date, timeOfDay: TimeOfDay): boolean {
-  const dayOfWeek = date.getDay();
+  const dayOfWeek = date.getUTCDay();
 
   // No appointments on Sundays
   if (dayOfWeek === SUNDAY) {
