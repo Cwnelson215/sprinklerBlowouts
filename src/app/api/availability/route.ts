@@ -43,9 +43,12 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
     const query: Record<string, unknown> = {
       zoneId: matchedZoneId,
-      date: { $gte: new Date() },
+      date: { $gte: today },
     };
 
     if (timeOfDay) {
