@@ -2,18 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { AvailabilityCalendar } from "@/components/admin/availability-calendar";
+import { DaySlotEditor } from "@/components/admin/day-slot-editor";
 
 interface AvailableDate {
   id: string;
   date: string;
   timeOfDay: string;
   maxBookings: number;
+  zoneId: string;
   zone: { name: string };
   _count: { bookings: number };
 }
@@ -23,24 +22,11 @@ interface Zone {
   name: string;
 }
 
-const timeOptions = [
-  { value: "MORNING", label: "Morning" },
-  { value: "AFTERNOON", label: "Afternoon" },
-  { value: "EVENING", label: "Evening" },
-];
-
 export default function AdminAvailabilityPage() {
   const [dates, setDates] = useState<AvailableDate[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
-  const [formData, setFormData] = useState({
-    zoneId: "",
-    date: "",
-    timeOfDay: "MORNING",
-    maxBookings: "20",
-  });
   const router = useRouter();
 
   useEffect(() => {
@@ -60,11 +46,7 @@ export default function AdminAvailabilityPage() {
       }
 
       setDates(await datesRes.json());
-      const zonesData = await zonesRes.json();
-      setZones(zonesData);
-      if (zonesData.length > 0 && !formData.zoneId) {
-        setFormData((f) => ({ ...f, zoneId: zonesData[0].id }));
-      }
+      setZones(await zonesRes.json());
     } catch (err) {
       console.error("Error fetching availability:", err);
     } finally {
@@ -74,32 +56,10 @@ export default function AdminAvailabilityPage() {
 
   const handleCalendarDateSelect = (date: Date) => {
     setSelectedCalendarDate(date);
-    const dateStr = format(date, "yyyy-MM-dd");
-    setFormData((f) => ({ ...f, date: dateStr }));
-    setShowForm(true);
   };
 
-  const createDate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const res = await fetch("/api/admin/availability", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          zoneId: formData.zoneId,
-          date: formData.date,
-          timeOfDay: formData.timeOfDay,
-          maxBookings: parseInt(formData.maxBookings),
-        }),
-      });
-      if (res.ok) {
-        setShowForm(false);
-        setSelectedCalendarDate(null);
-        fetchData();
-      }
-    } catch (err) {
-      console.error("Error creating date:", err);
-    }
+  const handleCloseEditor = () => {
+    setSelectedCalendarDate(null);
   };
 
   const deleteDate = async (id: string) => {
@@ -112,21 +72,10 @@ export default function AdminAvailabilityPage() {
     }
   };
 
-  const cancelForm = () => {
-    setShowForm(false);
-    setSelectedCalendarDate(null);
-    setFormData((f) => ({ ...f, date: "" }));
-  };
-
-  const zoneOptions = zones.map((z) => ({ value: z.id, label: z.name }));
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Available Dates</h1>
-        {!showForm && (
-          <Button onClick={() => setShowForm(true)}>Add Date</Button>
-        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -134,7 +83,7 @@ export default function AdminAvailabilityPage() {
         <Card>
           <CardHeader>
             <h2 className="text-lg font-semibold">Calendar View</h2>
-            <p className="text-sm text-gray-500">Click a date to add availability</p>
+            <p className="text-sm text-gray-500">Click a date to manage availability</p>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -149,67 +98,15 @@ export default function AdminAvailabilityPage() {
           </CardContent>
         </Card>
 
-        {/* Form */}
-        {showForm && (
-          <Card>
-            <CardHeader>
-              <h2 className="text-lg font-semibold">
-                {formData.date
-                  ? `Add Availability for ${format(new Date(formData.date + "T12:00:00"), "MMMM d, yyyy")}`
-                  : "New Available Date"}
-              </h2>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={createDate} className="space-y-4">
-                {zoneOptions.length > 0 && (
-                  <Select
-                    label="Zone"
-                    id="zoneId"
-                    options={zoneOptions}
-                    value={formData.zoneId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, zoneId: e.target.value })
-                    }
-                  />
-                )}
-                <Input
-                  label="Date"
-                  id="date"
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, date: e.target.value })
-                  }
-                />
-                <Select
-                  label="Time of Day"
-                  id="timeOfDay"
-                  options={timeOptions}
-                  value={formData.timeOfDay}
-                  onChange={(e) =>
-                    setFormData({ ...formData, timeOfDay: e.target.value })
-                  }
-                />
-                <Input
-                  label="Max Bookings"
-                  id="maxBookings"
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={formData.maxBookings}
-                  onChange={(e) =>
-                    setFormData({ ...formData, maxBookings: e.target.value })
-                  }
-                />
-                <div className="flex gap-2">
-                  <Button type="submit">Create</Button>
-                  <Button type="button" variant="secondary" onClick={cancelForm}>
-                    Cancel
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
+        {/* Day Slot Editor */}
+        {selectedCalendarDate && zones.length > 0 && (
+          <DaySlotEditor
+            selectedDate={selectedCalendarDate}
+            allDates={dates}
+            zones={zones}
+            onClose={handleCloseEditor}
+            onRefresh={fetchData}
+          />
         )}
       </div>
 

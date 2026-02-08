@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
         return {
           ...d,
           id: d._id.toHexString(),
+          zoneId: d.zoneId.toHexString(),
           zone: zone ? { name: zone.name } : null,
           _count: { bookings: bookingCount },
         };
@@ -85,6 +86,50 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     console.error("Availability create error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  const admin = await getAdminFromRequest(req);
+  if (!admin) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
+
+    const body = await req.json();
+    const { maxBookings } = body;
+
+    if (typeof maxBookings !== "number" || maxBookings < 1 || maxBookings > 100) {
+      return NextResponse.json(
+        { error: "maxBookings must be a number between 1 and 100" },
+        { status: 400 }
+      );
+    }
+
+    const db = await getDb();
+    const result = await db.collection("available_dates").updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { maxBookings } }
+    );
+
+    if (result.matchedCount === 0) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ ok: true, maxBookings });
+  } catch (error) {
+    console.error("Availability update error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
