@@ -7,7 +7,8 @@
     "build": "tsc",
     "preview": "pulumi preview",
     "up": "pulumi up",
-    "destroy": "pulumi destroy"
+    "destroy": "pulumi destroy",
+    "seed:zone": "npx tsx scripts/seed-zone.ts"
   },
   "dependencies": {
     "@pulumi/aws": "^6.0.0",

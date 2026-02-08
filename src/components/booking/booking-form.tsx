@@ -52,7 +52,7 @@ export function BookingForm() {
   } = useForm<BookingInput>({
     resolver: zodResolver(bookingSchema),
     defaultValues: {
-      state: "CO",
+      state: "WA",
     },
   });
 
@@ -244,7 +244,7 @@ export function BookingForm() {
               label="Phone (optional)"
               id="customerPhone"
               type="tel"
-              placeholder="(303) 555-1234"
+              placeholder="(509) 555-1234"
               error={errors.customerPhone?.message}
               {...register("customerPhone")}
             />
@@ -266,7 +266,7 @@ export function BookingForm() {
                 <Input
                   label="City"
                   id="city"
-                  placeholder="Denver"
+                  placeholder="Richland"
                   error={errors.city?.message}
                   {...register("city")}
                 />
@@ -275,7 +275,7 @@ export function BookingForm() {
                 <Input
                   label="State"
                   id="state"
-                  placeholder="CO"
+                  placeholder="WA"
                   maxLength={2}
                   error={errors.state?.message}
                   {...register("state")}
@@ -285,7 +285,7 @@ export function BookingForm() {
                 <Input
                   label="ZIP Code"
                   id="zip"
-                  placeholder="80202"
+                  placeholder="99353"
                   error={errors.zip?.message}
                   {...register("zip")}
                 />

@@ -6,7 +6,7 @@ export const bookingSchema = z.object({
   customerPhone: z.string().optional(),
   address: z.string().min(5, "Address is required"),
   city: z.string().min(2, "City is required"),
-  state: z.string().length(2, "Use 2-letter state code").default("CO"),
+  state: z.string().length(2, "Use 2-letter state code").default("WA"),
   zip: z.string().regex(/^\d{5}(-\d{4})?$/, "Invalid ZIP code"),
   preferredTime: z.enum(["MORNING", "AFTERNOON", "EVENING"], {
     errorMap: () => ({ message: "Please select a preferred time" }),
