@@ -8,6 +8,7 @@ import { bookingSchema, type BookingInput } from "@/lib/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { BookingCalendar } from "./booking-calendar";
 
 const timeOptions = [
   { value: "MORNING", label: "Morning (8 AM - 12 PM)" },
@@ -345,31 +346,11 @@ export function BookingForm() {
                 No available dates for this time slot. Please go back and select a different time preference.
               </div>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {availableDates.map((d) => (
-                  <button
-                    key={d.id}
-                    type="button"
-                    onClick={() => setSelectedDateId(d.id)}
-                    className={`p-4 rounded-lg border-2 text-left transition-colors ${
-                      selectedDateId === d.id
-                        ? "border-brand-600 bg-brand-50"
-                        : "border-gray-200 hover:border-brand-300"
-                    }`}
-                  >
-                    <div className="font-medium text-gray-900">
-                      {new Date(d.date + "T12:00:00").toLocaleDateString("en-US", {
-                        weekday: "long",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                    </div>
-                    <div className="text-sm text-gray-500 mt-1">
-                      {d.spotsRemaining} {d.spotsRemaining === 1 ? "spot" : "spots"} remaining
-                    </div>
-                  </button>
-                ))}
-              </div>
+              <BookingCalendar
+                availableDates={availableDates}
+                selectedDateId={selectedDateId}
+                onSelectDate={setSelectedDateId}
+              />
             )}
           </div>
         )}

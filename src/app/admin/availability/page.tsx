@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { AvailabilityCalendar } from "@/components/admin/availability-calendar";
 
 interface AvailableDate {
   id: string;
@@ -32,6 +34,7 @@ export default function AdminAvailabilityPage() {
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
   const [formData, setFormData] = useState({
     zoneId: "",
     date: "",
@@ -69,6 +72,13 @@ export default function AdminAvailabilityPage() {
     }
   };
 
+  const handleCalendarDateSelect = (date: Date) => {
+    setSelectedCalendarDate(date);
+    const dateStr = format(date, "yyyy-MM-dd");
+    setFormData((f) => ({ ...f, date: dateStr }));
+    setShowForm(true);
+  };
+
   const createDate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -84,6 +94,7 @@ export default function AdminAvailabilityPage() {
       });
       if (res.ok) {
         setShowForm(false);
+        setSelectedCalendarDate(null);
         fetchData();
       }
     } catch (err) {
@@ -101,25 +112,55 @@ export default function AdminAvailabilityPage() {
     }
   };
 
+  const cancelForm = () => {
+    setShowForm(false);
+    setSelectedCalendarDate(null);
+    setFormData((f) => ({ ...f, date: "" }));
+  };
+
   const zoneOptions = zones.map((z) => ({ value: z.id, label: z.name }));
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Available Dates</h1>
-        <Button onClick={() => setShowForm(!showForm)}>
-          {showForm ? "Cancel" : "Add Date"}
-        </Button>
+        {!showForm && (
+          <Button onClick={() => setShowForm(true)}>Add Date</Button>
+        )}
       </div>
 
-      {showForm && (
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Calendar view */}
         <Card>
           <CardHeader>
-            <h2 className="text-lg font-semibold">New Available Date</h2>
+            <h2 className="text-lg font-semibold">Calendar View</h2>
+            <p className="text-sm text-gray-500">Click a date to add availability</p>
           </CardHeader>
           <CardContent>
-            <form onSubmit={createDate} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            {loading ? (
+              <p className="text-gray-500">Loading...</p>
+            ) : (
+              <AvailabilityCalendar
+                availableDates={dates}
+                onSelectDate={handleCalendarDateSelect}
+                selectedDate={selectedCalendarDate}
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Form */}
+        {showForm && (
+          <Card>
+            <CardHeader>
+              <h2 className="text-lg font-semibold">
+                {formData.date
+                  ? `Add Availability for ${format(new Date(formData.date + "T12:00:00"), "MMMM d, yyyy")}`
+                  : "New Available Date"}
+              </h2>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={createDate} className="space-y-4">
                 {zoneOptions.length > 0 && (
                   <Select
                     label="Zone"
@@ -160,18 +201,25 @@ export default function AdminAvailabilityPage() {
                     setFormData({ ...formData, maxBookings: e.target.value })
                   }
                 />
-              </div>
-              <Button type="submit">Create</Button>
-            </form>
-          </CardContent>
-        </Card>
-      )}
+                <div className="flex gap-2">
+                  <Button type="submit">Create</Button>
+                  <Button type="button" variant="secondary" onClick={cancelForm}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
-      {loading ? (
-        <p className="text-gray-500">Loading...</p>
-      ) : (
+      {/* Table view */}
+      {!loading && (
         <Card>
-          <CardContent className="pt-4">
+          <CardHeader>
+            <h2 className="text-lg font-semibold">All Available Dates</h2>
+          </CardHeader>
+          <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>

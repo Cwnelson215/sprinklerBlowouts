@@ -28,7 +28,7 @@ async function seedZone() {
     console.log("Connected to MongoDB");
 
     const db = client.db();
-    const zonesCollection = db.collection("zones");
+    const zonesCollection = db.collection("service_zones");
 
     // Check if zone already exists
     const existingZone = await zonesCollection.findOne({ name: ZONE_CONFIG.name });
