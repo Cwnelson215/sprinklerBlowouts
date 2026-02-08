@@ -10,8 +10,14 @@ export default function HomePage() {
           </h1>
           <nav className="flex gap-4">
             <Link
+              href="/admin/login"
+              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Admin Login
+            </Link>
+            <Link
               href="/lookup"
-              className="text-sm text-gray-600 hover:text-brand-700"
+              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               Check Booking
             </Link>
@@ -38,13 +44,13 @@ export default function HomePage() {
           <div className="mt-10 flex items-center justify-center gap-4">
             <Link
               href="/booking"
-              className="rounded-lg bg-brand-600 px-8 py-3 text-lg font-semibold text-white shadow-sm hover:bg-brand-700"
+              className="rounded-md bg-brand-600 px-8 py-3 text-lg font-semibold text-white shadow-sm hover:bg-brand-700"
             >
               Schedule Your Blowout
             </Link>
             <Link
               href="/lookup"
-              className="rounded-lg border border-gray-300 px-8 py-3 text-lg font-semibold text-gray-700 hover:bg-gray-50"
+              className="rounded-md border border-gray-300 bg-white px-8 py-3 text-lg font-semibold text-gray-700 hover:bg-gray-50"
             >
               Look Up Booking
             </Link>
