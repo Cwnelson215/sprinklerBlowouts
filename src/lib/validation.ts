@@ -12,6 +12,10 @@ export const bookingSchema = z.object({
     errorMap: () => ({ message: "Please select a preferred time" }),
   }),
   notes: z.string().optional(),
+  lat: z.number().optional(),
+  lng: z.number().optional(),
+  zoneId: z.string().optional(),
+  availableDateId: z.string().optional(),
 });
 
 export type BookingInput = z.infer<typeof bookingSchema>;

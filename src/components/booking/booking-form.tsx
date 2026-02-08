@@ -15,13 +15,32 @@ const timeOptions = [
   { value: "EVENING", label: "Evening (4 PM - 7 PM)" },
 ];
 
-const steps = ["Contact Info", "Address", "Preferences"];
+const steps = ["Contact Info", "Address", "Time Preference", "Select Date"];
+
+interface GeoData {
+  lat: number;
+  lng: number;
+  zoneId: string;
+  zoneName: string;
+}
+
+interface AvailableDate {
+  id: string;
+  date: string;
+  dayOfWeek: string;
+  spotsRemaining: number;
+}
 
 export function BookingForm() {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [validatingAddress, setValidatingAddress] = useState(false);
+  const [loadingDates, setLoadingDates] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [geoData, setGeoData] = useState<GeoData | null>(null);
+  const [availableDates, setAvailableDates] = useState<AvailableDate[]>([]);
+  const [selectedDateId, setSelectedDateId] = useState<string | null>(null);
+  const [isFirstInZone, setIsFirstInZone] = useState(false);
   const router = useRouter();
 
   const {
@@ -49,12 +68,13 @@ export function BookingForm() {
       ["customerName", "customerEmail", "customerPhone"],
       ["address", "city", "state", "zip"],
       ["preferredTime"],
+      [], // Step 4: date selection validated separately
     ];
 
     const valid = await trigger(fieldsToValidate[step]);
     if (!valid) return;
 
-    // Validate address exists before proceeding to time selection
+    // Validate address and get zone info before proceeding to time selection
     if (step === 1) {
       setValidatingAddress(true);
       setError(null);
@@ -73,6 +93,19 @@ export function BookingForm() {
           setError(result.error || "We couldn't verify this address. Please check and try again.");
           return;
         }
+
+        if (!result.isInServiceArea) {
+          setError("Sorry, we don't currently service your area. Please check back later as we expand our service zones.");
+          return;
+        }
+
+        // Store geo data for later use
+        setGeoData({
+          lat: result.lat,
+          lng: result.lng,
+          zoneId: result.zoneId,
+          zoneName: result.zoneName,
+        });
       } catch {
         setError("Failed to validate address. Please try again.");
         return;
@@ -81,18 +114,68 @@ export function BookingForm() {
       }
     }
 
+    // Fetch available dates after time preference is selected
+    if (step === 2) {
+      if (!geoData) {
+        setError("Address data missing. Please go back and re-enter your address.");
+        return;
+      }
+
+      setLoadingDates(true);
+      setError(null);
+
+      try {
+        const { preferredTime } = getValues();
+        const res = await fetch(
+          `/api/geogroup-availability?zoneId=${geoData.zoneId}&timeOfDay=${preferredTime}`
+        );
+
+        if (!res.ok) {
+          throw new Error("Failed to fetch available dates");
+        }
+
+        const result = await res.json();
+        setAvailableDates(result.availableDates);
+        setIsFirstInZone(result.isFirstInZone);
+        setSelectedDateId(null); // Reset selection when dates change
+
+        if (result.availableDates.length === 0) {
+          setError("No available dates for this time slot. Please try a different time preference.");
+          return;
+        }
+      } catch {
+        setError("Failed to load available dates. Please try again.");
+        return;
+      } finally {
+        setLoadingDates(false);
+      }
+    }
+
     setStep((s) => Math.min(s + 1, steps.length - 1));
   };
 
   const onSubmit = async (data: BookingInput) => {
+    if (!selectedDateId) {
+      setError("Please select an available date.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
     try {
+      const bookingData = {
+        ...data,
+        lat: geoData?.lat,
+        lng: geoData?.lng,
+        zoneId: geoData?.zoneId,
+        availableDateId: selectedDateId,
+      };
+
       const res = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(bookingData),
       });
 
       if (!res.ok) {
@@ -211,7 +294,7 @@ export function BookingForm() {
           </div>
         )}
 
-        {/* Step 3: Preferences */}
+        {/* Step 3: Time Preference */}
         {step === 2 && (
           <div className="space-y-4">
             <Select
@@ -235,6 +318,59 @@ export function BookingForm() {
                 {...register("notes")}
               />
             </div>
+          </div>
+        )}
+
+        {/* Step 4: Select Date */}
+        {step === 3 && (
+          <div className="space-y-4">
+            <div className="text-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                Select Your Appointment Date
+              </h3>
+              {geoData && (
+                <p className="text-sm text-gray-500">
+                  Service Zone: {geoData.zoneName}
+                </p>
+              )}
+              {isFirstInZone && (
+                <p className="text-sm text-brand-600 mt-1">
+                  You're the first in your area! Choose any available date.
+                </p>
+              )}
+            </div>
+
+            {availableDates.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                No available dates for this time slot. Please go back and select a different time preference.
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {availableDates.map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => setSelectedDateId(d.id)}
+                    className={`p-4 rounded-lg border-2 text-left transition-colors ${
+                      selectedDateId === d.id
+                        ? "border-brand-600 bg-brand-50"
+                        : "border-gray-200 hover:border-brand-300"
+                    }`}
+                  >
+                    <div className="font-medium text-gray-900">
+                      {new Date(d.date + "T12:00:00").toLocaleDateString("en-US", {
+                        weekday: "long",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </div>
+                    <div className="text-sm text-gray-500 mt-1">
+                      {d.spotsRemaining} {d.spotsRemaining === 1 ? "spot" : "spots"} remaining
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -262,11 +398,22 @@ export function BookingForm() {
           )}
 
           {step < steps.length - 1 ? (
-            <Button type="button" onClick={nextStep} disabled={validatingAddress}>
-              {validatingAddress ? "Validating Address..." : "Continue"}
+            <Button
+              type="button"
+              onClick={nextStep}
+              disabled={validatingAddress || loadingDates}
+            >
+              {validatingAddress
+                ? "Validating Address..."
+                : loadingDates
+                ? "Loading Dates..."
+                : "Continue"}
             </Button>
           ) : (
-            <Button type="submit" disabled={submitting}>
+            <Button
+              type="submit"
+              disabled={submitting || !selectedDateId}
+            >
               {submitting ? "Submitting..." : "Book Now"}
             </Button>
           )}

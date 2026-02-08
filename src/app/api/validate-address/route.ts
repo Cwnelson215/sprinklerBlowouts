@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { geocodeAddress } from "@/lib/geocode";
+import { getDb } from "@/lib/mongodb";
+import { haversineDistance } from "@/lib/utils";
+import { ServiceZone } from "@/lib/types";
 import { z } from "zod";
 
 const addressSchema = z.object({
@@ -31,10 +34,30 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Find matching zone using haversine distance
+    const db = await getDb();
+    const zones = await db.collection<ServiceZone>("service_zones")
+      .find({ isActive: true })
+      .toArray();
+
+    let matchedZone: ServiceZone | null = null;
+    let nearestDistance = Infinity;
+
+    for (const zone of zones) {
+      const dist = haversineDistance(result.lat, result.lng, zone.centerLat, zone.centerLng);
+      if (dist <= zone.radiusMi && dist < nearestDistance) {
+        matchedZone = zone;
+        nearestDistance = dist;
+      }
+    }
+
     return NextResponse.json({
       valid: true,
       lat: result.lat,
       lng: result.lng,
+      zoneId: matchedZone?._id.toHexString() ?? null,
+      zoneName: matchedZone?.name ?? null,
+      isInServiceArea: matchedZone !== null,
     });
   } catch (error) {
     console.error("Error validating address:", error);

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { bookingSchema } from "@/lib/validation";
 import { generateJobNumber } from "@/lib/utils";
@@ -39,6 +40,11 @@ export async function POST(req: NextRequest) {
     }
 
     const now = new Date();
+
+    // If geo/zone data is provided, use it directly; otherwise leave null for async geocoding
+    const hasGeoData = data.lat !== undefined && data.lng !== undefined;
+    const hasDateSelection = !!data.availableDateId;
+
     const bookingDoc = {
       jobNumber,
       customerName: data.customerName,
@@ -50,11 +56,11 @@ export async function POST(req: NextRequest) {
       zip: data.zip,
       preferredTime: data.preferredTime,
       notes: data.notes || null,
-      status: "PENDING",
-      lat: null,
-      lng: null,
-      zoneId: null,
-      availableDateId: null,
+      status: hasDateSelection ? "SCHEDULED" : "PENDING",
+      lat: data.lat ?? null,
+      lng: data.lng ?? null,
+      zoneId: data.zoneId ? new ObjectId(data.zoneId) : null,
+      availableDateId: data.availableDateId ? new ObjectId(data.availableDateId) : null,
       routeGroupId: null,
       routeOrder: null,
       createdAt: now,
@@ -64,11 +70,13 @@ export async function POST(req: NextRequest) {
     const result = await db.collection("bookings").insertOne(bookingDoc);
     const bookingId = result.insertedId.toHexString();
 
-    // Queue geocoding job
-    try {
-      await scheduleJob(JOBS.GEOCODE_ADDRESS, { bookingId });
-    } catch (err) {
-      console.error("Failed to queue geocode job:", err);
+    // Only queue geocoding job if geo data wasn't provided
+    if (!hasGeoData) {
+      try {
+        await scheduleJob(JOBS.GEOCODE_ADDRESS, { bookingId });
+      } catch (err) {
+        console.error("Failed to queue geocode job:", err);
+      }
     }
 
     return NextResponse.json(
