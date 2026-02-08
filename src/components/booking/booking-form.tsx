@@ -20,6 +20,7 @@ const steps = ["Contact Info", "Address", "Preferences"];
 export function BookingForm() {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [validatingAddress, setValidatingAddress] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
@@ -27,6 +28,7 @@ export function BookingForm() {
     register,
     handleSubmit,
     trigger,
+    getValues,
     formState: { errors },
   } = useForm<BookingInput>({
     resolver: zodResolver(bookingSchema),
@@ -50,7 +52,36 @@ export function BookingForm() {
     ];
 
     const valid = await trigger(fieldsToValidate[step]);
-    if (valid) setStep((s) => Math.min(s + 1, steps.length - 1));
+    if (!valid) return;
+
+    // Validate address exists before proceeding to time selection
+    if (step === 1) {
+      setValidatingAddress(true);
+      setError(null);
+
+      try {
+        const { address, city, state, zip } = getValues();
+        const res = await fetch("/api/validate-address", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ address, city, state, zip }),
+        });
+
+        const result = await res.json();
+
+        if (!result.valid) {
+          setError(result.error || "We couldn't verify this address. Please check and try again.");
+          return;
+        }
+      } catch {
+        setError("Failed to validate address. Please try again.");
+        return;
+      } finally {
+        setValidatingAddress(false);
+      }
+    }
+
+    setStep((s) => Math.min(s + 1, steps.length - 1));
   };
 
   const onSubmit = async (data: BookingInput) => {
@@ -219,7 +250,10 @@ export function BookingForm() {
             <Button
               type="button"
               variant="secondary"
-              onClick={() => setStep((s) => s - 1)}
+              onClick={() => {
+                setError(null);
+                setStep((s) => s - 1);
+              }}
             >
               Back
             </Button>
@@ -228,8 +262,8 @@ export function BookingForm() {
           )}
 
           {step < steps.length - 1 ? (
-            <Button type="button" onClick={nextStep}>
-              Continue
+            <Button type="button" onClick={nextStep} disabled={validatingAddress}>
+              {validatingAddress ? "Validating Address..." : "Continue"}
             </Button>
           ) : (
             <Button type="submit" disabled={submitting}>
