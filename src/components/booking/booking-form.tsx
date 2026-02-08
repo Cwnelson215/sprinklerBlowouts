@@ -32,9 +32,15 @@ export function BookingForm() {
     resolver: zodResolver(bookingSchema),
     defaultValues: {
       state: "CO",
-      preferredTime: "MORNING",
     },
   });
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && step < steps.length - 1) {
+      e.preventDefault();
+      nextStep();
+    }
+  };
 
   const nextStep = async () => {
     const fieldsToValidate: (keyof BookingInput)[][] = [
@@ -101,7 +107,7 @@ export function BookingForm() {
         ))}
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={handleSubmit(onSubmit)} onKeyDown={handleKeyDown} className="space-y-6">
         {/* Step 1: Contact Info */}
         {step === 0 && (
           <div className="space-y-4">
@@ -181,6 +187,8 @@ export function BookingForm() {
               label="Preferred Time of Day"
               id="preferredTime"
               options={timeOptions}
+              placeholder="Select a time..."
+              defaultValue=""
               error={errors.preferredTime?.message}
               {...register("preferredTime")}
             />
