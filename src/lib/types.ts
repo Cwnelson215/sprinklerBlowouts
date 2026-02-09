@@ -91,7 +91,7 @@ export interface RouteGroup {
   _id: ObjectId;
   zoneId: ObjectId;
   date: Date;
-  timeOfDay: TimeOfDay;
+  timeOfDay?: TimeOfDay;
   optimizedRoute?: unknown;
   estimatedDuration?: number | null;
   estimatedDistance?: number | null;

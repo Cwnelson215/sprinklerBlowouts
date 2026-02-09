@@ -41,11 +41,10 @@ export async function handleAssignRouteGroup(data: AssignRouteGroupData) {
     return;
   }
 
-  // Find or create a route group for this zone/date/time
+  // Find or create a route group for this zone/date (combine all time slots)
   let routeGroup = await db.collection<RouteGroup>("route_groups").findOne({
     zoneId: booking.zoneId,
     date: availableDate.date,
-    timeOfDay: availableDate.timeOfDay,
   });
 
   if (!routeGroup) {
@@ -53,7 +52,6 @@ export async function handleAssignRouteGroup(data: AssignRouteGroupData) {
     const result = await db.collection("route_groups").insertOne({
       zoneId: booking.zoneId,
       date: availableDate.date,
-      timeOfDay: availableDate.timeOfDay,
       houseCount: 0,
       createdAt: now,
       updatedAt: now,
@@ -114,7 +112,30 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
       })
       .toArray();
 
-    if (bookings.length < 2) continue;
+    if (bookings.length === 0) continue;
+
+    if (bookings.length === 1) {
+      // Single booking - set order, no optimization needed
+      await db.collection<Booking>("bookings").updateOne(
+        { _id: bookings[0]._id },
+        { $set: { routeOrder: 0, updatedAt: new Date() } }
+      );
+
+      await db.collection<RouteGroup>("route_groups").updateOne(
+        { _id: group._id },
+        {
+          $set: {
+            optimizedRoute: { order: [bookings[0]._id.toHexString()], totalDistance: 0 },
+            estimatedDistance: 0,
+            estimatedDuration: 15,
+            updatedAt: new Date(),
+          },
+        }
+      );
+
+      console.log(`Set route for single-booking group ${group._id}`);
+      continue;
+    }
 
     const points = bookings.map((b) => ({
       id: b._id.toHexString(),

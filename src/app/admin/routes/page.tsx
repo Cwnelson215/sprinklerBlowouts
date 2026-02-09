@@ -26,7 +26,7 @@ interface RouteBooking {
 interface RouteGroup {
   id: string;
   date: string;
-  timeOfDay: string;
+  timeOfDay?: string;
   houseCount: number;
   estimatedDuration: number | null;
   estimatedDistance: number | null;
@@ -96,7 +96,7 @@ export default function AdminRoutesPage() {
               <div>
                 <h2 className="text-lg font-semibold">
                   {selectedRoute.zone.name} -{" "}
-                  {new Date(selectedRoute.date).toLocaleDateString()} {selectedRoute.timeOfDay}
+                  {new Date(selectedRoute.date).toLocaleDateString()}{selectedRoute.timeOfDay ? ` ${selectedRoute.timeOfDay}` : ""}
                 </h2>
                 <p className="text-sm text-gray-500">
                   {selectedRoute.houseCount} stops
@@ -162,8 +162,8 @@ export default function AdminRoutesPage() {
                     weekday: "short",
                     month: "short",
                     day: "numeric",
-                  })}{" "}
-                  - {route.timeOfDay}
+                  })}
+                  {route.timeOfDay && ` - ${route.timeOfDay}`}
                 </p>
                 <div className="mt-2 flex gap-4 text-sm text-gray-500">
                   <span>{route.houseCount} stops</span>
