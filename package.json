@@ -8,7 +8,8 @@
     "preview": "pulumi preview",
     "up": "pulumi up",
     "destroy": "pulumi destroy",
-    "seed:zone": "npx tsx scripts/seed-zone.ts"
+    "seed:zone": "npx tsx --env-file=src/.env.local scripts/seed-zone.ts",
+    "seed:bookings": "npx tsx --env-file=src/.env.local scripts/seed-bookings.ts"
   },
   "dependencies": {
     "@pulumi/aws": "^6.0.0",

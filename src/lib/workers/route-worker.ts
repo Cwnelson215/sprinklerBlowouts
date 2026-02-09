@@ -215,45 +215,109 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
       lng: b.lng!,
     }));
 
-    // Re-cluster with 5-mile max radius constraint
-    const clusters = dbscan(points, 1.5, 2, 5);
+    // Re-cluster with 0.5-mile max radius constraint
+    const clusters = dbscan(points, 0.5, 2, 0.5);
 
-    // For the main cluster (largest), optimize route
-    const mainCluster = clusters.reduce((a, b) =>
-      a.length >= b.length ? a : b
-    );
+    // Build a list of (routeGroupId, clusterPoints) pairs to optimize
+    const clustersToOptimize: { routeGroupId: ObjectId; clusterPoints: typeof points }[] = [];
 
-    const clusterPoints = mainCluster
+    // First cluster stays on the existing route group
+    const firstClusterPoints = clusters[0]
       .map((id) => points.find((p) => p.id === id)!)
       .filter(Boolean);
+    clustersToOptimize.push({ routeGroupId: group._id, clusterPoints: firstClusterPoints });
 
-    const optimized = optimizeRoute(clusterPoints);
+    // Additional clusters each get a new route group
+    for (let c = 1; c < clusters.length; c++) {
+      const extraPoints = clusters[c]
+        .map((id) => points.find((p) => p.id === id)!)
+        .filter(Boolean);
 
-    // Update route order on bookings
-    for (let i = 0; i < optimized.order.length; i++) {
-      await db.collection<Booking>("bookings").updateOne(
-        { _id: new ObjectId(optimized.order[i]) },
-        { $set: { routeOrder: i, updatedAt: new Date() } }
+      if (extraPoints.length === 0) continue;
+
+      const now = new Date();
+      const result = await db.collection("route_groups").insertOne({
+        zoneId: group.zoneId,
+        date: group.date,
+        houseCount: extraPoints.length,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      // Reassign bookings in this cluster to the new route group
+      const extraIds = extraPoints.map((p) => new ObjectId(p.id));
+      await db.collection<Booking>("bookings").updateMany(
+        { _id: { $in: extraIds } },
+        { $set: { routeGroupId: result.insertedId, updatedAt: new Date() } }
+      );
+
+      clustersToOptimize.push({ routeGroupId: result.insertedId, clusterPoints: extraPoints });
+      console.log(`Created new route group ${result.insertedId} for cluster with ${extraPoints.length} stops`);
+    }
+
+    // Optimize each cluster independently
+    for (const { routeGroupId, clusterPoints } of clustersToOptimize) {
+      if (clusterPoints.length === 0) continue;
+
+      if (clusterPoints.length === 1) {
+        await db.collection<Booking>("bookings").updateOne(
+          { _id: new ObjectId(clusterPoints[0].id) },
+          { $set: { routeOrder: 0, updatedAt: new Date() } }
+        );
+        await db.collection<RouteGroup>("route_groups").updateOne(
+          { _id: routeGroupId },
+          {
+            $set: {
+              optimizedRoute: { order: [clusterPoints[0].id], totalDistance: 0 },
+              estimatedDistance: 0,
+              estimatedDuration: 15,
+              houseCount: 1,
+              updatedAt: new Date(),
+            },
+          }
+        );
+        console.log(`Set route for single-stop cluster in group ${routeGroupId}`);
+        continue;
+      }
+
+      const optimized = optimizeRoute(clusterPoints);
+
+      // Update route order on bookings
+      for (let i = 0; i < optimized.order.length; i++) {
+        await db.collection<Booking>("bookings").updateOne(
+          { _id: new ObjectId(optimized.order[i]) },
+          { $set: { routeOrder: i, updatedAt: new Date() } }
+        );
+      }
+
+      await db.collection<RouteGroup>("route_groups").updateOne(
+        { _id: routeGroupId },
+        {
+          $set: {
+            optimizedRoute: optimized,
+            estimatedDistance: optimized.totalDistance,
+            // Rough estimate: 15 min per stop + drive time at 25 mph
+            estimatedDuration:
+              clusterPoints.length * 15 +
+              Math.round((optimized.totalDistance / 25) * 60),
+            houseCount: clusterPoints.length,
+            updatedAt: new Date(),
+          },
+        }
+      );
+
+      console.log(
+        `Optimized route group ${routeGroupId}: ${clusterPoints.length} stops, ${optimized.totalDistance} miles`
       );
     }
 
+    // Update house count on the original group (may have shrunk if clusters split off)
+    const remainingCount = await db.collection<Booking>("bookings").countDocuments({
+      routeGroupId: group._id,
+    });
     await db.collection<RouteGroup>("route_groups").updateOne(
       { _id: group._id },
-      {
-        $set: {
-          optimizedRoute: optimized,
-          estimatedDistance: optimized.totalDistance,
-          // Rough estimate: 15 min per stop + drive time at 25 mph
-          estimatedDuration:
-            clusterPoints.length * 15 +
-            Math.round((optimized.totalDistance / 25) * 60),
-          updatedAt: new Date(),
-        },
-      }
-    );
-
-    console.log(
-      `Optimized route group ${group._id}: ${clusterPoints.length} stops, ${optimized.totalDistance} miles`
+      { $set: { houseCount: remainingCount, updatedAt: new Date() } }
     );
   }
 }
