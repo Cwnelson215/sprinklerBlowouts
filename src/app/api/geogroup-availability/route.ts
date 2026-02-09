@@ -7,6 +7,14 @@ import { ServiceZone, AvailableDate, Booking, TimeOfDay } from "@/lib/types";
 const SATURDAY = 6;
 const SUNDAY = 0;
 
+// Helper to normalize dates that may be stored as strings or Date objects
+function normalizeDate(date: Date | string): Date {
+  if (typeof date === "string") {
+    return new Date(date + "T00:00:00.000Z");
+  }
+  return date;
+}
+
 function isValidDayForTimeSlot(date: Date, timeOfDay: TimeOfDay): boolean {
   const dayOfWeek = date.getUTCDay();
 
@@ -72,6 +80,7 @@ export async function GET(req: NextRequest) {
 
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split("T")[0]; // For string date comparison
 
     let availableDates: Array<{
       id: string;
@@ -84,18 +93,45 @@ export async function GET(req: NextRequest) {
 
     if (isFirstInZone) {
       // First booking in zone: Show all valid dates for the time block
+      // Note: dates may be stored as strings or Date objects, so we query for both
       const dates = await db.collection<AvailableDate>("available_dates")
         .find({
           zoneId: zoneObjectId,
           timeOfDay: timeOfDay,
-          date: { $gte: today },
+          $or: [
+            { date: { $gte: today } },      // Date objects
+            { date: { $gte: todayStr } },   // String dates
+          ],
         })
         .sort({ date: 1 })
         .toArray();
 
+      console.log("[geogroup-availability] Query params:", {
+        zoneId: zoneObjectId.toHexString(),
+        timeOfDay,
+        today: today.toISOString(),
+      });
+      console.log("[geogroup-availability] Found dates from DB:", dates.length);
+
+      // Debug: Check all dates in the collection
+      const allDates = await db.collection<AvailableDate>("available_dates")
+        .find({ timeOfDay: timeOfDay })
+        .limit(5)
+        .toArray();
+      console.log("[geogroup-availability] Sample dates in DB:", allDates.map(d => ({
+        zoneId: d.zoneId.toHexString(),
+        date: d.date,
+        dateType: typeof d.date,
+      })));
+      dates.forEach((d, i) => {
+        const dateObj = normalizeDate(d.date);
+        console.log(`  [${i}] date=${dateObj.toISOString()}, getUTCDay=${dateObj.getUTCDay()}, valid=${isValidDayForTimeSlot(dateObj, timeOfDay)}`);
+      });
+
       // Filter by day constraints and get booking counts
       for (const d of dates) {
-        if (!isValidDayForTimeSlot(d.date, timeOfDay)) {
+        const dateObj = normalizeDate(d.date);
+        if (!isValidDayForTimeSlot(dateObj, timeOfDay)) {
           continue;
         }
 
@@ -107,8 +143,8 @@ export async function GET(req: NextRequest) {
         if (bookingCount < d.maxBookings) {
           availableDates.push({
             id: d._id.toHexString(),
-            date: d.date.toISOString().split("T")[0],
-            dayOfWeek: d.date.toLocaleDateString("en-US", { weekday: "long" }),
+            date: dateObj.toISOString().split("T")[0],
+            dayOfWeek: dateObj.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" }),
             spotsRemaining: d.maxBookings - bookingCount,
           });
         }
@@ -125,12 +161,16 @@ export async function GET(req: NextRequest) {
         const dates = await db.collection<AvailableDate>("available_dates")
           .find({
             _id: { $in: existingDateIds.map(id => new ObjectId(id)) },
-            date: { $gte: today },
+            $or: [
+              { date: { $gte: today } },
+              { date: { $gte: todayStr } },
+            ],
           })
           .sort({ date: 1 })
           .toArray();
 
         for (const d of dates) {
+          const dateObj = normalizeDate(d.date);
           const bookingCount = await db.collection<Booking>("bookings").countDocuments({
             availableDateId: d._id,
             status: { $nin: ["CANCELLED"] },
@@ -139,8 +179,8 @@ export async function GET(req: NextRequest) {
           if (bookingCount < d.maxBookings) {
             availableDates.push({
               id: d._id.toHexString(),
-              date: d.date.toISOString().split("T")[0],
-              dayOfWeek: d.date.toLocaleDateString("en-US", { weekday: "long" }),
+              date: dateObj.toISOString().split("T")[0],
+              dayOfWeek: dateObj.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" }),
               spotsRemaining: d.maxBookings - bookingCount,
             });
           }

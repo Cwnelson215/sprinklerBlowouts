@@ -40,11 +40,15 @@ export async function POST(req: NextRequest) {
       .find({ isActive: true })
       .toArray();
 
+    console.log("[validate-address] Geocoded:", { lat: result.lat, lng: result.lng });
+    console.log("[validate-address] Active zones found:", zones.length);
+
     let matchedZone: ServiceZone | null = null;
     let nearestDistance = Infinity;
 
     for (const zone of zones) {
       const dist = haversineDistance(result.lat, result.lng, zone.centerLat, zone.centerLng);
+      console.log(`[validate-address] Zone "${zone.name}": center=(${zone.centerLat}, ${zone.centerLng}), radius=${zone.radiusMi}mi, distance=${dist.toFixed(2)}mi`);
       if (dist <= zone.radiusMi && dist < nearestDistance) {
         matchedZone = zone;
         nearestDistance = dist;
