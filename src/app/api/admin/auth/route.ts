@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { compare, hash } from "bcryptjs";
 import { getDb } from "@/lib/mongodb";
-import { adminLoginSchema } from "@/lib/validation";
+import { adminLoginSchema, adminSeedSchema } from "@/lib/validation";
 import { signToken, setAuthCookie, clearAuthCookie } from "@/lib/auth";
 import { AdminUser } from "@/lib/types";
 
@@ -18,19 +18,21 @@ export async function POST(req: NextRequest) {
     }
 
     const db = await getDb();
-    const admin = await db.collection<AdminUser>("admin_users").findOne({
-      email: parsed.data.email,
-    });
+    const admins = await db
+      .collection<AdminUser>("admin_users")
+      .find()
+      .toArray();
 
-    if (!admin) {
-      return NextResponse.json(
-        { error: "Invalid credentials" },
-        { status: 401 }
-      );
+    let admin: AdminUser | null = null;
+    for (const candidate of admins) {
+      const valid = await compare(parsed.data.password, candidate.passwordHash);
+      if (valid) {
+        admin = candidate;
+        break;
+      }
     }
 
-    const valid = await compare(parsed.data.password, admin.passwordHash);
-    if (!valid) {
+    if (!admin) {
       return NextResponse.json(
         { error: "Invalid credentials" },
         { status: 401 }
@@ -77,7 +79,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const parsed = adminLoginSchema.safeParse(body);
+    const parsed = adminSeedSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(

@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function AdminLoginPage() {
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -21,7 +20,7 @@ export default function AdminLoginPage() {
       const res = await fetch("/api/admin/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ password }),
       });
 
       if (!res.ok) {
@@ -43,13 +42,6 @@ export default function AdminLoginPage() {
         <h1 className="mb-6 text-2xl font-bold text-center">Admin Login</h1>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Email"
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
           <Input
             label="Password"
             id="password"

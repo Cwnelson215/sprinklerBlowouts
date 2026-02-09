@@ -36,6 +36,10 @@ export const bookingUpdateSchema = z.object({
 export type BookingUpdateInput = z.infer<typeof bookingUpdateSchema>;
 
 export const adminLoginSchema = z.object({
+  password: z.string().min(8),
+});
+
+export const adminSeedSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
 });
