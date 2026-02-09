@@ -9,6 +9,7 @@ interface AvailableDate {
   date: string;
   dayOfWeek: string;
   spotsRemaining: number;
+  availableTimes: string[];
 }
 
 interface BookingCalendarProps {
@@ -74,19 +75,19 @@ export function BookingCalendar({
     const availableDate = getAvailableDateForDay(info.date);
     if (!availableDate) return null;
 
-    const spots = availableDate.spotsRemaining;
+    const timesCount = availableDate.availableTimes.length;
 
     return (
       <span
         className={`text-[10px] leading-none ${
           info.isSelected
             ? "text-white/90"
-            : spots <= 3
+            : timesCount <= 3
             ? "text-amber-600"
             : "text-gray-500"
         }`}
       >
-        {spots} {spots === 1 ? "spot" : "spots"}
+        {timesCount} {timesCount === 1 ? "time" : "times"}
       </span>
     );
   };

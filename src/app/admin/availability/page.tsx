@@ -15,6 +15,9 @@ interface AvailableDate {
   zoneId: string;
   zone: { name: string };
   _count: { bookings: number };
+  disabledTimes: string[];
+  bookedTimes: string[];
+  allTimeSlots: string[];
 }
 
 interface Zone {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { ServiceZone, AvailableDate, Booking, TimeOfDay } from "@/lib/types";
+import { generateTimeSlots, getAvailableTimes } from "@/lib/time-slots";
 
 // Day of week constants (0 = Sunday, 6 = Saturday)
 const SATURDAY = 6;
@@ -87,9 +88,58 @@ export async function GET(req: NextRequest) {
       date: string;
       dayOfWeek: string;
       spotsRemaining: number;
+      availableTimes: string[];
     }> = [];
 
     const isFirstInZone = existingBookings.length === 0;
+
+    // Helper to calculate available times for a date
+    async function calculateAvailableTimesForDate(
+      d: AvailableDate,
+      dateStr: string
+    ): Promise<string[]> {
+      // Get all enabled slots for this date to calculate cross-slot spacing
+      const allSlotsForDate = await db
+        .collection<AvailableDate>("available_dates")
+        .find({
+          zoneId: d.zoneId,
+          $or: [
+            { date: normalizeDate(d.date) },
+            { date: dateStr as unknown as Date },
+          ],
+        })
+        .toArray();
+
+      const enabledSlots = allSlotsForDate.map((slot) => slot.timeOfDay);
+
+      // Generate all possible time slots
+      const allTimeSlots = generateTimeSlots(d.timeOfDay, enabledSlots);
+
+      // Get booked times for this date
+      const bookingsForDate = await db
+        .collection<Booking>("bookings")
+        .find({
+          availableDateId: d._id,
+          status: { $nin: ["CANCELLED"] },
+          bookedTime: { $ne: null },
+        })
+        .toArray();
+
+      const bookedTimes = bookingsForDate
+        .map((b) => b.bookedTime)
+        .filter((t): t is string => t !== null);
+
+      // Get admin-disabled times
+      const disabledTimes = d.disabledTimes || [];
+
+      // Calculate available times
+      return getAvailableTimes(
+        d.timeOfDay,
+        enabledSlots,
+        bookedTimes,
+        disabledTimes
+      );
+    }
 
     if (isFirstInZone) {
       // First booking in zone: Show all valid dates for the time block
@@ -100,7 +150,7 @@ export async function GET(req: NextRequest) {
           timeOfDay: timeOfDay,
           $or: [
             { date: { $gte: today } },      // Date objects
-            { date: { $gte: todayStr } },   // String dates
+            { date: { $gte: todayStr as unknown as Date } },   // String dates
           ],
         })
         .sort({ date: 1 })
@@ -128,24 +178,24 @@ export async function GET(req: NextRequest) {
         console.log(`  [${i}] date=${dateObj.toISOString()}, getUTCDay=${dateObj.getUTCDay()}, valid=${isValidDayForTimeSlot(dateObj, timeOfDay)}`);
       });
 
-      // Filter by day constraints and get booking counts
+      // Filter by day constraints and calculate available times
       for (const d of dates) {
         const dateObj = normalizeDate(d.date);
         if (!isValidDayForTimeSlot(dateObj, timeOfDay)) {
           continue;
         }
 
-        const bookingCount = await db.collection<Booking>("bookings").countDocuments({
-          availableDateId: d._id,
-          status: { $nin: ["CANCELLED"] },
-        });
+        const dateStr = dateObj.toISOString().split("T")[0];
+        const availableTimesForDate = await calculateAvailableTimesForDate(d, dateStr);
 
-        if (bookingCount < d.maxBookings) {
+        // Only include dates that have at least one available time
+        if (availableTimesForDate.length > 0) {
           availableDates.push({
             id: d._id.toHexString(),
-            date: dateObj.toISOString().split("T")[0],
+            date: dateStr,
             dayOfWeek: dateObj.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" }),
-            spotsRemaining: d.maxBookings - bookingCount,
+            spotsRemaining: availableTimesForDate.length,
+            availableTimes: availableTimesForDate,
           });
         }
       }
@@ -163,7 +213,7 @@ export async function GET(req: NextRequest) {
             _id: { $in: existingDateIds.map(id => new ObjectId(id)) },
             $or: [
               { date: { $gte: today } },
-              { date: { $gte: todayStr } },
+              { date: { $gte: todayStr as unknown as Date } },
             ],
           })
           .sort({ date: 1 })
@@ -171,17 +221,17 @@ export async function GET(req: NextRequest) {
 
         for (const d of dates) {
           const dateObj = normalizeDate(d.date);
-          const bookingCount = await db.collection<Booking>("bookings").countDocuments({
-            availableDateId: d._id,
-            status: { $nin: ["CANCELLED"] },
-          });
+          const dateStr = dateObj.toISOString().split("T")[0];
+          const availableTimesForDate = await calculateAvailableTimesForDate(d, dateStr);
 
-          if (bookingCount < d.maxBookings) {
+          // Only include dates that have at least one available time
+          if (availableTimesForDate.length > 0) {
             availableDates.push({
               id: d._id.toHexString(),
-              date: dateObj.toISOString().split("T")[0],
+              date: dateStr,
               dayOfWeek: dateObj.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" }),
-              spotsRemaining: d.maxBookings - bookingCount,
+              spotsRemaining: availableTimesForDate.length,
+              availableTimes: availableTimesForDate,
             });
           }
         }

@@ -59,6 +59,7 @@ export interface AvailableDate {
   date: Date;
   timeOfDay: TimeOfDay;
   maxBookings: number;
+  disabledTimes: string[]; // e.g., ["08:00", "09:30"] - disabled by admin
   createdAt: Date;
 }
 
@@ -75,6 +76,7 @@ export interface Booking {
   lat?: number | null;
   lng?: number | null;
   preferredTime: TimeOfDay;
+  bookedTime: string | null; // e.g., "08:00", "08:45", "14:30"
   status: BookingStatus;
   notes?: string | null;
   zoneId?: ObjectId | null;

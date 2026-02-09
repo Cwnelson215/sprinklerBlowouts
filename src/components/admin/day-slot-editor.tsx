@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { SlotToggle } from "./slot-toggle";
+import { TimeIncrementToggle } from "./time-increment-toggle";
 
 interface AvailableDate {
   id: string;
@@ -15,6 +16,9 @@ interface AvailableDate {
   zoneId: string;
   zone: { name: string };
   _count: { bookings: number };
+  disabledTimes: string[];
+  bookedTimes: string[];
+  allTimeSlots: string[];
 }
 
 interface Zone {
@@ -58,8 +62,14 @@ export function DaySlotEditor({
       slotId: slot?.id || null,
       maxBookings: slot?.maxBookings || 20,
       currentBookings: slot?._count.bookings || 0,
+      disabledTimes: slot?.disabledTimes || [],
+      bookedTimes: slot?.bookedTimes || [],
+      allTimeSlots: slot?.allTimeSlots || [],
     };
   };
+
+  // State to track which time slot is expanded
+  const [expandedSlot, setExpandedSlot] = useState<string | null>(null);
 
   const handleToggle = async (timeOfDay: string, enabled: boolean) => {
     if (enabled) {
@@ -111,6 +121,30 @@ export function DaySlotEditor({
     }
   };
 
+  const handleTimeToggle = async (timeOfDay: string, time: string, enabled: boolean) => {
+    const slotData = getSlotData(timeOfDay);
+    if (!slotData.slotId) return;
+
+    // Calculate new disabled times
+    let newDisabledTimes: string[];
+    if (enabled) {
+      // Remove from disabled times
+      newDisabledTimes = slotData.disabledTimes.filter((t) => t !== time);
+    } else {
+      // Add to disabled times
+      newDisabledTimes = [...slotData.disabledTimes, time];
+    }
+
+    const res = await fetch(`/api/admin/availability?id=${slotData.slotId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ disabledTimes: newDisabledTimes }),
+    });
+    if (res.ok) {
+      onRefresh();
+    }
+  };
+
   const zoneOptions = zones.map((z) => ({ value: z.id, label: z.name }));
 
   return (
@@ -141,17 +175,53 @@ export function DaySlotEditor({
           <div className="space-y-2">
             {TIME_SLOTS.map((timeOfDay) => {
               const slotData = getSlotData(timeOfDay);
+              const isExpanded = expandedSlot === timeOfDay;
+
               return (
-                <SlotToggle
-                  key={timeOfDay}
-                  timeOfDay={timeOfDay}
-                  enabled={slotData.enabled}
-                  maxBookings={slotData.maxBookings}
-                  currentBookings={slotData.currentBookings}
-                  slotId={slotData.slotId}
-                  onToggle={(enabled) => handleToggle(timeOfDay, enabled)}
-                  onMaxBookingsChange={(max) => handleMaxBookingsChange(timeOfDay, max)}
-                />
+                <div key={timeOfDay} className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <SlotToggle
+                        timeOfDay={timeOfDay}
+                        enabled={slotData.enabled}
+                        maxBookings={slotData.maxBookings}
+                        currentBookings={slotData.currentBookings}
+                        slotId={slotData.slotId}
+                        onToggle={(enabled) => handleToggle(timeOfDay, enabled)}
+                        onMaxBookingsChange={(max) => handleMaxBookingsChange(timeOfDay, max)}
+                      />
+                    </div>
+                    {slotData.enabled && slotData.allTimeSlots.length > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setExpandedSlot(isExpanded ? null : timeOfDay)}
+                        className="text-xs"
+                      >
+                        {isExpanded ? "Hide Times" : "Manage Times"}
+                      </Button>
+                    )}
+                  </div>
+
+                  {slotData.enabled && isExpanded && slotData.allTimeSlots.length > 0 && (
+                    <div className="ml-4 border rounded-lg bg-white">
+                      <div className="p-2 border-b bg-gray-50">
+                        <p className="text-xs text-gray-500">
+                          Toggle individual time slots. Booked times cannot be disabled.
+                        </p>
+                      </div>
+                      {slotData.allTimeSlots.map((time) => (
+                        <TimeIncrementToggle
+                          key={time}
+                          time={time}
+                          isBooked={slotData.bookedTimes.includes(time)}
+                          isDisabled={slotData.disabledTimes.includes(time)}
+                          onToggle={(enabled) => handleTimeToggle(timeOfDay, time, enabled)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>

@@ -4,7 +4,8 @@ import { getDb } from "@/lib/mongodb";
 import { bookingSchema } from "@/lib/validation";
 import { generateJobNumber } from "@/lib/utils";
 import { scheduleJob, JOBS } from "@/lib/queue";
-import { Booking } from "@/lib/types";
+import { Booking, AvailableDate } from "@/lib/types";
+import { generateTimeSlots } from "@/lib/time-slots";
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,6 +22,74 @@ export async function POST(req: NextRequest) {
     const data = parsed.data;
     const db = await getDb();
     const bookings = db.collection<Booking>("bookings");
+
+    // Validate bookedTime if provided with availableDateId
+    if (data.availableDateId && data.bookedTime) {
+      const availableDateObjectId = new ObjectId(data.availableDateId);
+
+      // Get the available date to check validity
+      const availableDate = await db
+        .collection<AvailableDate>("available_dates")
+        .findOne({ _id: availableDateObjectId });
+
+      if (!availableDate) {
+        return NextResponse.json(
+          { error: "Selected date is no longer available" },
+          { status: 400 }
+        );
+      }
+
+      // Get all enabled slots for this date to validate time slot
+      const dateStr =
+        typeof availableDate.date === "string"
+          ? availableDate.date
+          : availableDate.date.toISOString().split("T")[0];
+
+      const allSlotsForDate = await db
+        .collection<AvailableDate>("available_dates")
+        .find({
+          zoneId: availableDate.zoneId,
+          $or: [{ date: availableDate.date }, { date: dateStr as unknown as Date }],
+        })
+        .toArray();
+
+      const enabledSlots = allSlotsForDate.map((slot) => slot.timeOfDay);
+      const validTimeSlots = generateTimeSlots(
+        availableDate.timeOfDay,
+        enabledSlots
+      );
+
+      // Check if the requested time is valid for this slot
+      if (!validTimeSlots.includes(data.bookedTime)) {
+        return NextResponse.json(
+          { error: "Invalid time selection for this time slot" },
+          { status: 400 }
+        );
+      }
+
+      // Check if the time is disabled by admin
+      const disabledTimes = availableDate.disabledTimes || [];
+      if (disabledTimes.includes(data.bookedTime)) {
+        return NextResponse.json(
+          { error: "This time slot has been disabled" },
+          { status: 400 }
+        );
+      }
+
+      // Check for race condition - is this time already booked?
+      const existingBooking = await bookings.findOne({
+        availableDateId: availableDateObjectId,
+        bookedTime: data.bookedTime,
+        status: { $nin: ["CANCELLED"] },
+      });
+
+      if (existingBooking) {
+        return NextResponse.json(
+          { error: "This time slot has just been booked by someone else" },
+          { status: 409 }
+        );
+      }
+    }
 
     // Generate unique job number
     let jobNumber: string;
@@ -55,6 +124,7 @@ export async function POST(req: NextRequest) {
       state: data.state,
       zip: data.zip,
       preferredTime: data.preferredTime,
+      bookedTime: data.bookedTime || null,
       notes: data.notes || null,
       status: hasDateSelection ? "SCHEDULED" : "PENDING",
       lat: data.lat ?? null,

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { BookingCalendar } from "./booking-calendar";
+import { TimeGrid } from "./time-grid";
 
 const timeOptions = [
   { value: "MORNING", label: "Morning (8 AM - 12 PM)" },
@@ -16,7 +17,7 @@ const timeOptions = [
   { value: "EVENING", label: "Evening (4 PM - 7 PM)" },
 ];
 
-const steps = ["Contact Info", "Address", "Time Preference", "Select Date"];
+const steps = ["Contact Info", "Address", "Time Preference", "Select Date", "Select Time"];
 
 interface GeoData {
   lat: number;
@@ -30,6 +31,7 @@ interface AvailableDate {
   date: string;
   dayOfWeek: string;
   spotsRemaining: number;
+  availableTimes: string[];
 }
 
 export function BookingForm() {
@@ -41,6 +43,7 @@ export function BookingForm() {
   const [geoData, setGeoData] = useState<GeoData | null>(null);
   const [availableDates, setAvailableDates] = useState<AvailableDate[]>([]);
   const [selectedDateId, setSelectedDateId] = useState<string | null>(null);
+  const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [isFirstInZone, setIsFirstInZone] = useState(false);
   const router = useRouter();
 
@@ -70,6 +73,7 @@ export function BookingForm() {
       ["address", "city", "state", "zip"],
       ["preferredTime"],
       [], // Step 4: date selection validated separately
+      [], // Step 5: time selection validated separately
     ];
 
     const valid = await trigger(fieldsToValidate[step]);
@@ -139,6 +143,7 @@ export function BookingForm() {
         setAvailableDates(result.availableDates);
         setIsFirstInZone(result.isFirstInZone);
         setSelectedDateId(null); // Reset selection when dates change
+        setSelectedTime(null); // Reset time selection when dates change
 
         if (result.availableDates.length === 0) {
           setError("No available dates for this time slot. Please try a different time preference.");
@@ -152,12 +157,36 @@ export function BookingForm() {
       }
     }
 
+    // Validate date selection before proceeding to time selection
+    if (step === 3) {
+      if (!selectedDateId) {
+        setError("Please select an available date.");
+        return;
+      }
+      // Reset time selection when moving to time step
+      setSelectedTime(null);
+    }
+
     setStep((s) => Math.min(s + 1, steps.length - 1));
+  };
+
+  // Get the selected date object to access available times
+  const selectedDateObj = availableDates.find((d) => d.id === selectedDateId);
+
+  // Handle date selection and reset time
+  const handleDateSelect = (dateId: string) => {
+    setSelectedDateId(dateId);
+    setSelectedTime(null); // Reset time when date changes
   };
 
   const onSubmit = async (data: BookingInput) => {
     if (!selectedDateId) {
       setError("Please select an available date.");
+      return;
+    }
+
+    if (!selectedTime) {
+      setError("Please select an available time.");
       return;
     }
 
@@ -171,6 +200,7 @@ export function BookingForm() {
         lng: geoData?.lng,
         zoneId: geoData?.zoneId,
         availableDateId: selectedDateId,
+        bookedTime: selectedTime,
       };
 
       const res = await fetch("/api/bookings", {
@@ -349,8 +379,36 @@ export function BookingForm() {
               <BookingCalendar
                 availableDates={availableDates}
                 selectedDateId={selectedDateId}
-                onSelectDate={setSelectedDateId}
+                onSelectDate={handleDateSelect}
               />
+            )}
+          </div>
+        )}
+
+        {/* Step 5: Select Time */}
+        {step === 4 && (
+          <div className="space-y-4">
+            <div className="text-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                Select Your Appointment Time
+              </h3>
+              {selectedDateObj && (
+                <p className="text-sm text-gray-500">
+                  {selectedDateObj.dayOfWeek}, {selectedDateObj.date}
+                </p>
+              )}
+            </div>
+
+            {selectedDateObj ? (
+              <TimeGrid
+                availableTimes={selectedDateObj.availableTimes}
+                selectedTime={selectedTime}
+                onSelectTime={setSelectedTime}
+              />
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                Please go back and select a date.
+              </div>
             )}
           </div>
         )}
@@ -382,7 +440,7 @@ export function BookingForm() {
             <Button
               type="button"
               onClick={nextStep}
-              disabled={validatingAddress || loadingDates}
+              disabled={validatingAddress || loadingDates || (step === 3 && !selectedDateId)}
             >
               {validatingAddress
                 ? "Validating Address..."
@@ -393,7 +451,7 @@ export function BookingForm() {
           ) : (
             <Button
               type="submit"
-              disabled={submitting || !selectedDateId}
+              disabled={submitting || !selectedDateId || !selectedTime}
             >
               {submitting ? "Submitting..." : "Book Now"}
             </Button>

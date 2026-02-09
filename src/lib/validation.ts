@@ -16,6 +16,10 @@ export const bookingSchema = z.object({
   lng: z.number().optional(),
   zoneId: z.string().optional(),
   availableDateId: z.string().optional(),
+  bookedTime: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, "Invalid time format (expected HH:MM)")
+    .optional(),
 });
 
 export type BookingInput = z.infer<typeof bookingSchema>;
@@ -49,4 +53,8 @@ export const availableDateSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   timeOfDay: z.enum(["MORNING", "AFTERNOON", "EVENING"]),
   maxBookings: z.number().int().min(1).max(100).default(20),
+  disabledTimes: z
+    .array(z.string().regex(/^\d{2}:\d{2}$/))
+    .optional()
+    .default([]),
 });
