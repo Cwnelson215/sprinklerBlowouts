@@ -12,7 +12,7 @@ export default function BookingPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-lg px-4 py-12">
+      <main className="mx-auto max-w-3xl px-4 py-12">
         <h1 className="mb-2 text-2xl font-bold">Schedule Your Blowout</h1>
         <p className="mb-8 text-gray-600">
           Fill out the form below and we&apos;ll get you scheduled.
