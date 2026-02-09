@@ -30,7 +30,7 @@ interface RouteGroup {
   houseCount: number;
   estimatedDuration: number | null;
   estimatedDistance: number | null;
-  zone: { name: string };
+  zone: { name: string } | null;
   bookings: RouteBooking[];
 }
 
@@ -95,7 +95,7 @@ export default function AdminRoutesPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold">
-                  {selectedRoute.zone.name} -{" "}
+                  {selectedRoute.zone?.name ?? "Unknown Zone"} -{" "}
                   {new Date(selectedRoute.date).toLocaleDateString()}{selectedRoute.timeOfDay ? ` ${selectedRoute.timeOfDay}` : ""}
                 </h2>
                 <p className="text-sm text-gray-500">
@@ -156,7 +156,7 @@ export default function AdminRoutesPage() {
               onClick={() => setSelectedRoute(route)}
             >
               <CardContent className="pt-4">
-                <h3 className="font-semibold">{route.zone.name}</h3>
+                <h3 className="font-semibold">{route.zone?.name ?? "Unknown Zone"}</h3>
                 <p className="text-sm text-gray-600">
                   {new Date(route.date).toLocaleDateString("en-US", {
                     weekday: "short",

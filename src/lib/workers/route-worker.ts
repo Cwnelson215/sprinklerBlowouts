@@ -94,6 +94,78 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
   const { zoneId, date } = data;
   const db = await getDb();
 
+  // First, create route groups for any scheduled bookings that don't have one
+  const bookingQuery: Record<string, unknown> = {
+    status: { $in: ["SCHEDULED", "CONFIRMED"] },
+    availableDateId: { $ne: null },
+    zoneId: { $ne: null },
+    lat: { $ne: null },
+    lng: { $ne: null },
+    routeGroupId: null,
+  };
+  if (zoneId) bookingQuery.zoneId = new ObjectId(zoneId);
+
+  const unassignedBookings = await db.collection<Booking>("bookings")
+    .find(bookingQuery)
+    .toArray();
+
+  console.log(`Found ${unassignedBookings.length} scheduled bookings without route groups`);
+
+  for (const booking of unassignedBookings) {
+    if (!booking.availableDateId || !booking.zoneId) continue;
+
+    const availableDate = await db.collection<AvailableDate>("available_dates").findOne({
+      _id: booking.availableDateId,
+    });
+
+    if (!availableDate) continue;
+
+    // Skip if date filter is set and doesn't match
+    if (date && availableDate.date.toISOString() !== new Date(date).toISOString()) continue;
+
+    // Find or create route group for this zone/date
+    let routeGroup = await db.collection<RouteGroup>("route_groups").findOne({
+      zoneId: booking.zoneId,
+      date: availableDate.date,
+    });
+
+    if (!routeGroup) {
+      const now = new Date();
+      const result = await db.collection("route_groups").insertOne({
+        zoneId: booking.zoneId,
+        date: availableDate.date,
+        houseCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+      routeGroup = await db.collection<RouteGroup>("route_groups").findOne({
+        _id: result.insertedId,
+      });
+      console.log(`Created route group for zone ${booking.zoneId} on ${availableDate.date}`);
+    }
+
+    if (routeGroup) {
+      await db.collection<Booking>("bookings").updateOne(
+        { _id: booking._id },
+        { $set: { routeGroupId: routeGroup._id, updatedAt: new Date() } }
+      );
+      console.log(`Assigned booking ${booking.jobNumber} to route group ${routeGroup._id}`);
+    }
+  }
+
+  // Update house counts for all route groups
+  const allRouteGroups = await db.collection<RouteGroup>("route_groups").find({}).toArray();
+  for (const group of allRouteGroups) {
+    const count = await db.collection<Booking>("bookings").countDocuments({
+      routeGroupId: group._id,
+    });
+    await db.collection<RouteGroup>("route_groups").updateOne(
+      { _id: group._id },
+      { $set: { houseCount: count, updatedAt: new Date() } }
+    );
+  }
+
+  // Now proceed with route optimization
   const query: Record<string, unknown> = {};
   if (zoneId) query.zoneId = new ObjectId(zoneId);
   if (date) query.date = new Date(date);
