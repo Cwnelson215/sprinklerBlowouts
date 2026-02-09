@@ -3,6 +3,7 @@ import { getDb } from "../mongodb";
 import { geocodeAddress } from "../geocode";
 import { haversineDistance } from "../utils";
 import { Booking, ServiceZone } from "../types";
+import { scheduleJob, JOBS } from "../queue";
 
 interface GeocodeJobData {
   bookingId: string;
@@ -69,6 +70,15 @@ export async function handleGeocodeJob(data: GeocodeJobData) {
       },
     }
   );
+
+  // If booking has a zone and a date, queue route group assignment
+  if (nearestZone && booking.availableDateId) {
+    try {
+      await scheduleJob(JOBS.ASSIGN_ROUTE_GROUP, { bookingId });
+    } catch (err) {
+      console.error("Failed to queue route assignment after geocode:", err);
+    }
+  }
 
   console.log(
     `Geocoded booking ${booking.jobNumber}: (${result.lat}, ${result.lng})` +

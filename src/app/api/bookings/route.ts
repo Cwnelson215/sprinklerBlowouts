@@ -149,6 +149,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Queue route group assignment if booking has geo data, a date, and a zone
+    if (hasGeoData && hasDateSelection && data.zoneId) {
+      try {
+        await scheduleJob(JOBS.ASSIGN_ROUTE_GROUP, { bookingId });
+      } catch (err) {
+        console.error("Failed to queue route assignment job:", err);
+      }
+    }
+
     return NextResponse.json(
       {
         jobNumber: bookingDoc.jobNumber,
