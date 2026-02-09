@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import dynamic from "next/dynamic";
+import { generateGoogleMapsUrl, generateGpxString, downloadFile } from "@/lib/route-export";
 
 const RouteMap = dynamic(() => import("@/components/admin/route-map"), {
   ssr: false,
@@ -17,6 +18,9 @@ interface RouteBooking {
   jobNumber: string;
   customerName: string;
   address: string;
+  city?: string;
+  state?: string;
+  zip?: string;
   lat: number | null;
   lng: number | null;
   routeOrder: number | null;
@@ -108,9 +112,39 @@ export default function AdminRoutesPage() {
                     : ""}
                 </p>
               </div>
-              <Button variant="secondary" size="sm" onClick={() => setSelectedRoute(null)}>
-                Close
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const geocoded = selectedRoute.bookings.filter(
+                      (b) => b.lat !== null && b.lng !== null
+                    ) as (RouteBooking & { lat: number; lng: number })[];
+                    if (geocoded.length === 0) return;
+                    window.open(generateGoogleMapsUrl(geocoded), "_blank");
+                  }}
+                >
+                  Open in Google Maps
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const geocoded = selectedRoute.bookings.filter(
+                      (b) => b.lat !== null && b.lng !== null
+                    ) as (RouteBooking & { lat: number; lng: number })[];
+                    if (geocoded.length === 0) return;
+                    const routeName = `${selectedRoute.zone?.name ?? "Route"} - ${new Date(selectedRoute.date).toLocaleDateString()}`;
+                    const gpx = generateGpxString(routeName, geocoded);
+                    downloadFile(gpx, `${routeName}.gpx`, "application/gpx+xml");
+                  }}
+                >
+                  Export GPX
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setSelectedRoute(null)}>
+                  Close
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
