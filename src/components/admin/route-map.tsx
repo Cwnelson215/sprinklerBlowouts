@@ -28,6 +28,29 @@ function createNumberedIcon(num: number): L.DivIcon {
   });
 }
 
+function createDepotIcon(): L.DivIcon {
+  return L.divIcon({
+    className: "",
+    html: `<div style="
+      background-color: #2563eb;
+      color: white;
+      border: 2px solid white;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      font-weight: bold;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    ">S</div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -18],
+  });
+}
+
 interface RouteBooking {
   id: string;
   jobNumber: string;
@@ -41,11 +64,18 @@ interface RouteBooking {
   routeOrder: number | null;
 }
 
-interface RouteMapProps {
-  bookings: RouteBooking[];
+interface DepotPoint {
+  lat: number;
+  lng: number;
+  address: string;
 }
 
-export default function RouteMap({ bookings }: RouteMapProps) {
+interface RouteMapProps {
+  bookings: RouteBooking[];
+  depot?: DepotPoint;
+}
+
+export default function RouteMap({ bookings, depot }: RouteMapProps) {
   const geocodedBookings = bookings.filter(
     (b): b is RouteBooking & { lat: number; lng: number } =>
       b.lat !== null && b.lng !== null
@@ -56,9 +86,12 @@ export default function RouteMap({ bookings }: RouteMapProps) {
     (a, b) => (a.routeOrder ?? 999) - (b.routeOrder ?? 999)
   );
 
-  const { coordinates, loading, isFallback } = useOsrmRoute(
-    sorted.map((b) => ({ lat: b.lat, lng: b.lng }))
-  );
+  // Include depot as the first point in the route line if provided
+  const routeStops = depot
+    ? [{ lat: depot.lat, lng: depot.lng }, ...sorted.map((b) => ({ lat: b.lat, lng: b.lng }))]
+    : sorted.map((b) => ({ lat: b.lat, lng: b.lng }));
+
+  const { coordinates, loading, isFallback } = useOsrmRoute(routeStops);
 
   if (geocodedBookings.length === 0) {
     return (
@@ -93,6 +126,17 @@ export default function RouteMap({ bookings }: RouteMapProps) {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+        {depot && (
+          <Marker position={[depot.lat, depot.lng]} icon={createDepotIcon()}>
+            <Popup>
+              <div>
+                <strong>Start - Depot</strong>
+                <br />
+                {depot.address}
+              </div>
+            </Popup>
+          </Marker>
+        )}
         {geocodedBookings.map((b) => {
           const stopNum = b.routeOrder !== null ? b.routeOrder + 1 : 0;
           const fullAddress = [b.address, b.city, b.state, b.zip]

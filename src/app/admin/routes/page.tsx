@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import dynamic from "next/dynamic";
 import { generateGoogleMapsUrl, generateGpxString, downloadFile } from "@/lib/route-export";
+import { DEPOT } from "@/lib/constants";
 
 const RouteMap = dynamic(() => import("@/components/admin/route-map"), {
   ssr: false,
@@ -121,7 +122,7 @@ export default function AdminRoutesPage() {
                       (b) => b.lat !== null && b.lng !== null
                     ) as (RouteBooking & { lat: number; lng: number })[];
                     if (geocoded.length === 0) return;
-                    window.open(generateGoogleMapsUrl(geocoded), "_blank");
+                    window.open(generateGoogleMapsUrl(geocoded, DEPOT), "_blank");
                   }}
                 >
                   Open in Google Maps
@@ -135,7 +136,7 @@ export default function AdminRoutesPage() {
                     ) as (RouteBooking & { lat: number; lng: number })[];
                     if (geocoded.length === 0) return;
                     const routeName = `${selectedRoute.zone?.name ?? "Route"} - ${new Date(selectedRoute.date).toLocaleDateString()}`;
-                    const gpx = generateGpxString(routeName, geocoded);
+                    const gpx = generateGpxString(routeName, geocoded, DEPOT);
                     downloadFile(gpx, `${routeName}.gpx`, "application/gpx+xml");
                   }}
                 >
@@ -148,7 +149,7 @@ export default function AdminRoutesPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <RouteMap bookings={selectedRoute.bookings} />
+            <RouteMap bookings={selectedRoute.bookings} depot={{ lat: DEPOT.lat, lng: DEPOT.lng, address: `${DEPOT.address}, ${DEPOT.city}, ${DEPOT.state} ${DEPOT.zip}` }} />
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>

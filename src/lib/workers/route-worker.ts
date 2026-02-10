@@ -3,6 +3,7 @@ import { getDb } from "../mongodb";
 import { dbscan } from "../clustering";
 import { optimizeRoute } from "../route-optimizer";
 import { Booking, RouteGroup, AvailableDate } from "../types";
+import { DEPOT } from "../constants";
 
 interface AssignRouteGroupData {
   bookingId: string;
@@ -41,17 +42,24 @@ export async function handleAssignRouteGroup(data: AssignRouteGroupData) {
     return;
   }
 
+  // Normalize date to midnight UTC for consistent same-day grouping
+  const normalizedDate = new Date(Date.UTC(
+    availableDate.date.getUTCFullYear(),
+    availableDate.date.getUTCMonth(),
+    availableDate.date.getUTCDate()
+  ));
+
   // Find or create a route group for this zone/date (combine all time slots)
   let routeGroup = await db.collection<RouteGroup>("route_groups").findOne({
     zoneId: booking.zoneId,
-    date: availableDate.date,
+    date: normalizedDate,
   });
 
   if (!routeGroup) {
     const now = new Date();
     const result = await db.collection("route_groups").insertOne({
       zoneId: booking.zoneId,
-      date: availableDate.date,
+      date: normalizedDate,
       houseCount: 0,
       createdAt: now,
       updatedAt: now,
@@ -120,20 +128,35 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
 
     if (!availableDate) continue;
 
+    // Normalize date to midnight UTC for consistent same-day grouping
+    const normalizedDate = new Date(Date.UTC(
+      availableDate.date.getUTCFullYear(),
+      availableDate.date.getUTCMonth(),
+      availableDate.date.getUTCDate()
+    ));
+
     // Skip if date filter is set and doesn't match
-    if (date && availableDate.date.toISOString() !== new Date(date).toISOString()) continue;
+    if (date) {
+      const filterDate = new Date(date);
+      const normalizedFilter = new Date(Date.UTC(
+        filterDate.getUTCFullYear(),
+        filterDate.getUTCMonth(),
+        filterDate.getUTCDate()
+      ));
+      if (normalizedDate.getTime() !== normalizedFilter.getTime()) continue;
+    }
 
     // Find or create route group for this zone/date
     let routeGroup = await db.collection<RouteGroup>("route_groups").findOne({
       zoneId: booking.zoneId,
-      date: availableDate.date,
+      date: normalizedDate,
     });
 
     if (!routeGroup) {
       const now = new Date();
       const result = await db.collection("route_groups").insertOne({
         zoneId: booking.zoneId,
-        date: availableDate.date,
+        date: normalizedDate,
         houseCount: 0,
         createdAt: now,
         updatedAt: now,
@@ -141,7 +164,7 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
       routeGroup = await db.collection<RouteGroup>("route_groups").findOne({
         _id: result.insertedId,
       });
-      console.log(`Created route group for zone ${booking.zoneId} on ${availableDate.date}`);
+      console.log(`Created route group for zone ${booking.zoneId} on ${normalizedDate.toISOString()}`);
     }
 
     if (routeGroup) {
@@ -187,7 +210,13 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
     if (bookings.length === 0) continue;
 
     if (bookings.length === 1) {
-      // Single booking - set order, no optimization needed
+      // Single booking - set order, include depot-to-stop distance
+      const depot = { lat: DEPOT.lat, lng: DEPOT.lng };
+      const singleResult = optimizeRoute(
+        [{ id: bookings[0]._id.toHexString(), lat: bookings[0].lat!, lng: bookings[0].lng! }],
+        depot
+      );
+
       await db.collection<Booking>("bookings").updateOne(
         { _id: bookings[0]._id },
         { $set: { routeOrder: 0, updatedAt: new Date() } }
@@ -197,9 +226,9 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
         { _id: group._id },
         {
           $set: {
-            optimizedRoute: { order: [bookings[0]._id.toHexString()], totalDistance: 0 },
-            estimatedDistance: 0,
-            estimatedDuration: 15,
+            optimizedRoute: singleResult,
+            estimatedDistance: singleResult.totalDistance,
+            estimatedDuration: 15 + Math.round((singleResult.totalDistance / 25) * 60),
             updatedAt: new Date(),
           },
         }
@@ -259,7 +288,10 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
     for (const { routeGroupId, clusterPoints } of clustersToOptimize) {
       if (clusterPoints.length === 0) continue;
 
+      const depot = { lat: DEPOT.lat, lng: DEPOT.lng };
+
       if (clusterPoints.length === 1) {
+        const singleResult = optimizeRoute(clusterPoints, depot);
         await db.collection<Booking>("bookings").updateOne(
           { _id: new ObjectId(clusterPoints[0].id) },
           { $set: { routeOrder: 0, updatedAt: new Date() } }
@@ -268,9 +300,9 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
           { _id: routeGroupId },
           {
             $set: {
-              optimizedRoute: { order: [clusterPoints[0].id], totalDistance: 0 },
-              estimatedDistance: 0,
-              estimatedDuration: 15,
+              optimizedRoute: singleResult,
+              estimatedDistance: singleResult.totalDistance,
+              estimatedDuration: 15 + Math.round((singleResult.totalDistance / 25) * 60),
               houseCount: 1,
               updatedAt: new Date(),
             },
@@ -280,7 +312,7 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
         continue;
       }
 
-      const optimized = optimizeRoute(clusterPoints);
+      const optimized = optimizeRoute(clusterPoints, depot);
 
       // Update route order on bookings
       for (let i = 0; i < optimized.order.length; i++) {
