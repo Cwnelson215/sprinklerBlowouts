@@ -50,7 +50,7 @@ export function DaySlotEditor({
   // Find existing slots for this date and zone
   const slotsForDate = useMemo(() => {
     return allDates.filter((d) => {
-      const dDateStr = format(new Date(d.date), "yyyy-MM-dd");
+      const dDateStr = d.date.split("T")[0];
       return dDateStr === dateString && d.zoneId === selectedZoneId;
     });
   }, [allDates, dateString, selectedZoneId]);

@@ -101,7 +101,7 @@ export default function AdminRoutesPage() {
               <div>
                 <h2 className="text-lg font-semibold">
                   {selectedRoute.zone?.name ?? "Unknown Zone"} -{" "}
-                  {new Date(selectedRoute.date).toLocaleDateString()}{selectedRoute.timeOfDay ? ` ${selectedRoute.timeOfDay}` : ""}
+                  {new Date(selectedRoute.date).toLocaleDateString("en-US", { timeZone: "UTC" })}{selectedRoute.timeOfDay ? ` ${selectedRoute.timeOfDay}` : ""}
                 </h2>
                 <p className="text-sm text-gray-500">
                   {selectedRoute.houseCount} stops
@@ -135,7 +135,7 @@ export default function AdminRoutesPage() {
                       (b) => b.lat !== null && b.lng !== null
                     ) as (RouteBooking & { lat: number; lng: number })[];
                     if (geocoded.length === 0) return;
-                    const routeName = `${selectedRoute.zone?.name ?? "Route"} - ${new Date(selectedRoute.date).toLocaleDateString()}`;
+                    const routeName = `${selectedRoute.zone?.name ?? "Route"} - ${new Date(selectedRoute.date).toLocaleDateString("en-US", { timeZone: "UTC" })}`;
                     const gpx = generateGpxString(routeName, geocoded, DEPOT);
                     downloadFile(gpx, `${routeName}.gpx`, "application/gpx+xml");
                   }}
@@ -197,6 +197,7 @@ export default function AdminRoutesPage() {
                     weekday: "short",
                     month: "short",
                     day: "numeric",
+                    timeZone: "UTC",
                   })}
                   {route.timeOfDay && ` - ${route.timeOfDay}`}
                 </p>

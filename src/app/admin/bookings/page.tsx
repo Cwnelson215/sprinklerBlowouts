@@ -163,7 +163,7 @@ export default function AdminBookingsPage() {
                         <td className="py-2 pr-4">{b.zone?.name || "-"}</td>
                         <td className="py-2 pr-4 text-xs">
                           {b.availableDate
-                            ? `${new Date(b.availableDate.date).toLocaleDateString()} ${b.availableDate.timeOfDay}`
+                            ? `${new Date(b.availableDate.date).toLocaleDateString("en-US", { timeZone: "UTC" })} ${b.availableDate.timeOfDay}`
                             : "-"}
                         </td>
                         <td className="py-2 pr-4">

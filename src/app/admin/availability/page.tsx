@@ -140,6 +140,7 @@ export default function AdminAvailabilityPage() {
                           month: "short",
                           day: "numeric",
                           year: "numeric",
+                          timeZone: "UTC",
                         })}
                       </td>
                       <td className="py-2 pr-4">{d.timeOfDay}</td>
