@@ -151,11 +151,15 @@ async function seedBookings() {
     }
     console.log(`Using zone: ${zone.name} (${zone._id})`);
 
-    // Clear existing test bookings and available dates
+    // Clear existing test bookings, available dates, route groups, and jobs
     const deletedBookings = await bookingsCol.deleteMany({});
     const deletedDates = await availableDatesCol.deleteMany({});
+    const deletedRouteGroups = await db.collection("route_groups").deleteMany({});
+    const deletedJobs = await db.collection("jobs").deleteMany({});
     console.log(`Cleared ${deletedBookings.deletedCount} existing bookings`);
     console.log(`Cleared ${deletedDates.deletedCount} existing available dates`);
+    console.log(`Cleared ${deletedRouteGroups.deletedCount} existing route groups`);
+    console.log(`Cleared ${deletedJobs.deletedCount} existing jobs`);
 
     const usedJobNumbers = new Set<string>();
     let totalBookings = 0;
