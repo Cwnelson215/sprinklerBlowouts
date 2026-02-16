@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") as BookingStatus | null;
     const zoneId = searchParams.get("zoneId");
+    const serviceType = searchParams.get("serviceType");
     const search = searchParams.get("search");
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
@@ -23,6 +24,7 @@ export async function GET(req: NextRequest) {
 
     if (status) query.status = status;
     if (zoneId) query.zoneId = new ObjectId(zoneId);
+    if (serviceType) query.serviceType = serviceType;
     if (search) {
       query.$or = [
         { jobNumber: { $regex: search, $options: "i" } },

@@ -7,10 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { SERVICE_CONFIGS } from "@/lib/service-config";
+import type { ServiceType } from "@/lib/types";
 
 interface Booking {
   id: string;
   jobNumber: string;
+  serviceType?: string;
   customerName: string;
   customerEmail: string;
   address: string;
@@ -57,19 +60,21 @@ export default function AdminBookingsPage() {
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [serviceTypeFilter, setServiceTypeFilter] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
     fetchBookings();
-  }, [page, statusFilter]);
+  }, [page, statusFilter, serviceTypeFilter]);
 
   const fetchBookings = async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: page.toString(), limit: "20" });
       if (statusFilter) params.set("status", statusFilter);
+      if (serviceTypeFilter) params.set("serviceType", serviceTypeFilter);
       if (search) params.set("search", search);
 
       const res = await fetch(`/api/admin/bookings?${params}`);
@@ -128,6 +133,18 @@ export default function AdminBookingsPage() {
                 setPage(1);
               }}
             />
+            <Select
+              options={[
+                { value: "", label: "All Services" },
+                { value: "SPRINKLER_BLOWOUT", label: "Blowout" },
+                { value: "BACKFLOW_TESTING", label: "Backflow" },
+              ]}
+              value={serviceTypeFilter}
+              onChange={(e) => {
+                setServiceTypeFilter(e.target.value);
+                setPage(1);
+              }}
+            />
             <Button type="submit">Search</Button>
           </form>
         </CardHeader>
@@ -141,6 +158,7 @@ export default function AdminBookingsPage() {
                   <thead>
                     <tr className="border-b text-left text-gray-500">
                       <th className="pb-2 pr-4">Job #</th>
+                      <th className="pb-2 pr-4">Service</th>
                       <th className="pb-2 pr-4">Customer</th>
                       <th className="pb-2 pr-4">Address</th>
                       <th className="pb-2 pr-4">Zone</th>
@@ -153,6 +171,9 @@ export default function AdminBookingsPage() {
                     {bookings.map((b) => (
                       <tr key={b.id} className="border-b last:border-0">
                         <td className="py-2 pr-4 font-mono">{b.jobNumber}</td>
+                        <td className="py-2 pr-4 text-xs">
+                          {b.serviceType ? (SERVICE_CONFIGS[b.serviceType as ServiceType]?.shortLabel || b.serviceType) : "-"}
+                        </td>
                         <td className="py-2 pr-4">
                           <div>{b.customerName}</div>
                           <div className="text-xs text-gray-400">{b.customerEmail}</div>
@@ -181,7 +202,7 @@ export default function AdminBookingsPage() {
                     ))}
                     {bookings.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="py-4 text-center text-gray-400">
+                        <td colSpan={8} className="py-4 text-center text-gray-400">
                           No bookings found
                         </td>
                       </tr>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { ServiceZone, AvailableDate, Booking, TimeOfDay } from "@/lib/types";
+import { ServiceZone, AvailableDate, Booking, TimeOfDay, ServiceType } from "@/lib/types";
 import { generateTimeSlots, getAvailableTimes } from "@/lib/time-slots";
 
 // Day of week constants (0 = Sunday, 6 = Saturday)
@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const zoneId = searchParams.get("zoneId");
     const timeOfDay = searchParams.get("timeOfDay") as TimeOfDay | null;
+    const serviceType = searchParams.get("serviceType");
 
     if (!zoneId) {
       return NextResponse.json(
@@ -49,6 +50,13 @@ export async function GET(req: NextRequest) {
     if (!timeOfDay || !["MORNING", "AFTERNOON", "EVENING"].includes(timeOfDay)) {
       return NextResponse.json(
         { error: "Valid timeOfDay is required (MORNING, AFTERNOON, or EVENING)" },
+        { status: 400 }
+      );
+    }
+
+    if (!serviceType || !["SPRINKLER_BLOWOUT", "BACKFLOW_TESTING"].includes(serviceType)) {
+      return NextResponse.json(
+        { error: "Valid serviceType is required (SPRINKLER_BLOWOUT or BACKFLOW_TESTING)" },
         { status: 400 }
       );
     }
@@ -69,11 +77,12 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Check for existing bookings in this zone with matching timeOfDay
+    // Check for existing bookings in this zone with matching timeOfDay and serviceType
     const existingBookings = await db.collection<Booking>("bookings")
       .find({
         zoneId: zoneObjectId,
         preferredTime: timeOfDay,
+        serviceType: serviceType as ServiceType,
         status: { $in: ["SCHEDULED", "CONFIRMED"] },
         availableDateId: { $ne: null },
       })
@@ -103,6 +112,7 @@ export async function GET(req: NextRequest) {
         .collection<AvailableDate>("available_dates")
         .find({
           zoneId: d.zoneId,
+          serviceType: serviceType as ServiceType,
           $or: [
             { date: normalizeDate(d.date) },
             { date: dateStr as unknown as Date },
@@ -148,6 +158,7 @@ export async function GET(req: NextRequest) {
         .find({
           zoneId: zoneObjectId,
           timeOfDay: timeOfDay,
+          serviceType: serviceType as ServiceType,
           $or: [
             { date: { $gte: today } },      // Date objects
             { date: { $gte: todayStr as unknown as Date } },   // String dates

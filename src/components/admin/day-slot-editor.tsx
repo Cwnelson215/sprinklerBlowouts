@@ -12,6 +12,7 @@ interface AvailableDate {
   id: string;
   date: string;
   timeOfDay: string;
+  serviceType?: string;
   maxBookings: number;
   zoneId: string;
   zone: { name: string };
@@ -32,9 +33,15 @@ interface DaySlotEditorProps {
   zones: Zone[];
   onClose: () => void;
   onRefresh: () => void;
+  defaultServiceType?: string;
 }
 
 const TIME_SLOTS = ["MORNING", "AFTERNOON", "EVENING"] as const;
+
+const SERVICE_TYPE_OPTIONS = [
+  { value: "SPRINKLER_BLOWOUT", label: "Sprinkler Blowout" },
+  { value: "BACKFLOW_TESTING", label: "Backflow Testing" },
+];
 
 export function DaySlotEditor({
   selectedDate,
@@ -42,18 +49,20 @@ export function DaySlotEditor({
   zones,
   onClose,
   onRefresh,
+  defaultServiceType,
 }: DaySlotEditorProps) {
   const [selectedZoneId, setSelectedZoneId] = useState(zones[0]?.id || "");
+  const [selectedServiceType, setSelectedServiceType] = useState(defaultServiceType || "SPRINKLER_BLOWOUT");
 
   const dateString = format(selectedDate, "yyyy-MM-dd");
 
-  // Find existing slots for this date and zone
+  // Find existing slots for this date, zone, and service type
   const slotsForDate = useMemo(() => {
     return allDates.filter((d) => {
       const dDateStr = d.date.split("T")[0];
-      return dDateStr === dateString && d.zoneId === selectedZoneId;
+      return dDateStr === dateString && d.zoneId === selectedZoneId && d.serviceType === selectedServiceType;
     });
-  }, [allDates, dateString, selectedZoneId]);
+  }, [allDates, dateString, selectedZoneId, selectedServiceType]);
 
   const getSlotData = (timeOfDay: string) => {
     const slot = slotsForDate.find((s) => s.timeOfDay === timeOfDay);
@@ -81,6 +90,7 @@ export function DaySlotEditor({
           zoneId: selectedZoneId,
           date: dateString,
           timeOfDay,
+          serviceType: selectedServiceType,
           maxBookings: 20,
         }),
       });
@@ -169,6 +179,14 @@ export function DaySlotEditor({
             onChange={(e) => setSelectedZoneId(e.target.value)}
           />
         )}
+
+        <Select
+          label="Service Type"
+          id="service-type-select"
+          options={SERVICE_TYPE_OPTIONS}
+          value={selectedServiceType}
+          onChange={(e) => setSelectedServiceType(e.target.value)}
+        />
 
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-gray-700">Time Slots</h3>

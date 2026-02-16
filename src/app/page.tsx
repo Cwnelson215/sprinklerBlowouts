@@ -6,7 +6,7 @@ export default function HomePage() {
       <header className="border-b bg-white/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <h1 className="text-xl font-bold text-brand-700">
-            Sprinkler Blowouts
+            Sprinkler Services
           </h1>
           <nav className="flex gap-4">
             <Link
@@ -34,25 +34,40 @@ export default function HomePage() {
       <main className="mx-auto max-w-5xl px-4 py-16">
         <div className="text-center">
           <h2 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
-            Winterize Your Sprinkler System
+            Professional Sprinkler Services
           </h2>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-600">
-            Protect your irrigation system from freeze damage. We use
-            compressed air to blow out all remaining water from your sprinkler
-            lines, heads, and valves.
+            From winterization blowouts to annual backflow prevention testing,
+            we keep your irrigation system safe and compliant year-round.
           </p>
-          <div className="mt-10 flex items-center justify-center gap-4">
+        </div>
+
+        <div className="mt-12 grid gap-8 sm:grid-cols-2">
+          <div className="rounded-xl border bg-white p-8 shadow-sm">
+            <h3 className="text-xl font-semibold text-gray-900">Sprinkler Blowout</h3>
+            <p className="mt-3 text-gray-600">
+              Protect your irrigation system from freeze damage. We use
+              compressed air to blow out all remaining water from your sprinkler
+              lines, heads, and valves.
+            </p>
             <Link
               href="/booking"
-              className="rounded-md bg-brand-600 px-8 py-3 text-lg font-semibold text-white shadow-sm hover:bg-brand-700"
+              className="mt-6 inline-block rounded-md bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
             >
-              Schedule Your Blowout
+              Book a Blowout
             </Link>
+          </div>
+          <div className="rounded-xl border bg-white p-8 shadow-sm">
+            <h3 className="text-xl font-semibold text-gray-900">Backflow Prevention Testing</h3>
+            <p className="mt-3 text-gray-600">
+              Annual backflow preventer testing to keep your water supply safe
+              and compliant with local regulations.
+            </p>
             <Link
-              href="/lookup"
-              className="rounded-md border border-gray-300 bg-white px-8 py-3 text-lg font-semibold text-gray-700 hover:bg-gray-50"
+              href="/booking"
+              className="mt-6 inline-block rounded-md bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
             >
-              Look Up Booking
+              Book a Backflow Test
             </Link>
           </div>
         </div>
@@ -60,9 +75,9 @@ export default function HomePage() {
         <div className="mt-24 grid gap-8 sm:grid-cols-3">
           <div className="rounded-xl border bg-white p-6 shadow-sm">
             <div className="mb-4 text-3xl">1</div>
-            <h3 className="text-lg font-semibold">Enter Your Address</h3>
+            <h3 className="text-lg font-semibold">Choose Your Service</h3>
             <p className="mt-2 text-sm text-gray-600">
-              Tell us where you are and your preferred time of day.
+              Select the service you need and enter your address.
             </p>
           </div>
           <div className="rounded-xl border bg-white p-6 shadow-sm">
@@ -85,7 +100,7 @@ export default function HomePage() {
       </main>
 
       <footer className="border-t py-8 text-center text-sm text-gray-500">
-        Sprinkler Blowout Service
+        Sprinkler Services
       </footer>
     </div>
   );

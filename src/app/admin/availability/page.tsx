@@ -4,13 +4,17 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Select } from "@/components/ui/select";
 import { AvailabilityCalendar } from "@/components/admin/availability-calendar";
 import { DaySlotEditor } from "@/components/admin/day-slot-editor";
+import { SERVICE_CONFIGS } from "@/lib/service-config";
+import type { ServiceType } from "@/lib/types";
 
 interface AvailableDate {
   id: string;
   date: string;
   timeOfDay: string;
+  serviceType?: string;
   maxBookings: number;
   zoneId: string;
   zone: { name: string };
@@ -30,16 +34,19 @@ export default function AdminAvailabilityPage() {
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
+  const [serviceTypeFilter, setServiceTypeFilter] = useState("");
   const router = useRouter();
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [serviceTypeFilter]);
 
   const fetchData = async () => {
     try {
+      const availParams = new URLSearchParams();
+      if (serviceTypeFilter) availParams.set("serviceType", serviceTypeFilter);
       const [datesRes, zonesRes] = await Promise.all([
-        fetch("/api/admin/availability"),
+        fetch(`/api/admin/availability?${availParams}`),
         fetch("/api/admin/zones"),
       ]);
 
@@ -79,6 +86,17 @@ export default function AdminAvailabilityPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Available Dates</h1>
+        <Select
+          options={[
+            { value: "", label: "All Services" },
+            { value: "SPRINKLER_BLOWOUT", label: "Blowout" },
+            { value: "BACKFLOW_TESTING", label: "Backflow" },
+          ]}
+          value={serviceTypeFilter}
+          onChange={(e) => {
+            setServiceTypeFilter(e.target.value);
+          }}
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -109,6 +127,7 @@ export default function AdminAvailabilityPage() {
             zones={zones}
             onClose={handleCloseEditor}
             onRefresh={fetchData}
+            defaultServiceType={serviceTypeFilter}
           />
         )}
       </div>
@@ -126,6 +145,7 @@ export default function AdminAvailabilityPage() {
                   <tr className="border-b text-left text-gray-500">
                     <th className="pb-2 pr-4">Date</th>
                     <th className="pb-2 pr-4">Time</th>
+                    <th className="pb-2 pr-4">Service</th>
                     <th className="pb-2 pr-4">Zone</th>
                     <th className="pb-2 pr-4">Booked / Max</th>
                     <th className="pb-2">Actions</th>
@@ -144,6 +164,9 @@ export default function AdminAvailabilityPage() {
                         })}
                       </td>
                       <td className="py-2 pr-4">{d.timeOfDay}</td>
+                      <td className="py-2 pr-4 text-xs">
+                        {d.serviceType ? (SERVICE_CONFIGS[d.serviceType as ServiceType]?.shortLabel || d.serviceType) : "-"}
+                      </td>
                       <td className="py-2 pr-4">{d.zone.name}</td>
                       <td className="py-2 pr-4">
                         <span
@@ -169,7 +192,7 @@ export default function AdminAvailabilityPage() {
                   ))}
                   {dates.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-4 text-center text-gray-400">
+                      <td colSpan={6} className="py-4 text-center text-gray-400">
                         No available dates configured
                       </td>
                     </tr>

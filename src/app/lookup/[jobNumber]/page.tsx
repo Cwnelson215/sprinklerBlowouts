@@ -6,9 +6,12 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { SERVICE_CONFIGS } from "@/lib/service-config";
+import type { ServiceType } from "@/lib/types";
 
 interface BookingDetail {
   jobNumber: string;
+  serviceType?: string;
   customerName: string;
   customerEmail: string;
   customerPhone: string | null;
@@ -121,7 +124,7 @@ export default function BookingDetailPage() {
         <header className="border-b bg-white">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
             <Link href="/" className="text-xl font-bold text-brand-700">
-              Sprinkler Blowouts
+              Sprinkler Services
             </Link>
           </div>
         </header>
@@ -140,7 +143,7 @@ export default function BookingDetailPage() {
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <Link href="/" className="text-xl font-bold text-brand-700">
-            Sprinkler Blowouts
+            Sprinkler Services
           </Link>
         </div>
       </header>
@@ -157,6 +160,13 @@ export default function BookingDetailPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {booking.serviceType && (
+              <div>
+                <p className="text-sm font-medium text-gray-500">Service</p>
+                <p>{SERVICE_CONFIGS[booking.serviceType as ServiceType]?.label || booking.serviceType}</p>
+              </div>
+            )}
+
             <div>
               <p className="text-sm font-medium text-gray-500">Customer</p>
               <p>{booking.customerName}</p>

@@ -58,6 +58,7 @@ export async function handleSendEmail(data: SendEmailData) {
         })
       : undefined,
     timeOfDay: availableDate?.timeOfDay,
+    serviceType: booking.serviceType,
   };
 
   let email: { subject: string; html: string };

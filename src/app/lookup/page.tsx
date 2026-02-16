@@ -42,7 +42,7 @@ export default function LookupPage() {
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <Link href="/" className="text-xl font-bold text-brand-700">
-            Sprinkler Blowouts
+            Sprinkler Services
           </Link>
           <Link
             href="/booking"
@@ -64,7 +64,7 @@ export default function LookupPage() {
             <Input
               label="Job Number"
               id="jobNumber"
-              placeholder="SB-2026-A3F7"
+              placeholder="e.g., SB-2026-A3F7 or BF-2026-A3F7"
               value={jobNumber}
               onChange={(e) => setJobNumber(e.target.value.toUpperCase())}
             />

@@ -3,17 +3,21 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { SERVICE_CONFIGS } from "@/lib/service-config";
+import type { ServiceType } from "@/lib/types";
 
 function ConfirmationContent() {
   const searchParams = useSearchParams();
   const jobNumber = searchParams.get("jobNumber");
+  const serviceType = searchParams.get("serviceType") as ServiceType | null;
+  const config = serviceType ? SERVICE_CONFIGS[serviceType] : null;
 
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <Link href="/" className="text-xl font-bold text-brand-700">
-            Sprinkler Blowouts
+            Sprinkler Services
           </Link>
         </div>
       </header>
@@ -25,8 +29,8 @@ function ConfirmationContent() {
             Booking Submitted!
           </h1>
           <p className="mb-6 text-gray-600">
-            Your sprinkler blowout request has been received. We&apos;re
-            processing your address and will match you with available dates.
+            Your {config ? config.shortLabel.toLowerCase() : "service"} request has been received.
+            We&apos;re processing your address and will match you with available dates.
           </p>
 
           {jobNumber && (

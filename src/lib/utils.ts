@@ -5,14 +5,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function generateJobNumber(): string {
+export function generateJobNumber(prefix = "SB"): string {
   const year = new Date().getFullYear();
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
   for (let i = 0; i < 4; i++) {
     code += chars[Math.floor(Math.random() * chars.length)];
   }
-  return `SB-${year}-${code}`;
+  return `${prefix}-${year}-${code}`;
 }
 
 export function haversineDistance(

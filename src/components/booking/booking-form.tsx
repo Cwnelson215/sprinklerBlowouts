@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { bookingSchema, type BookingInput } from "@/lib/validation";
+import { SERVICE_TYPE_OPTIONS } from "@/lib/service-config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -17,7 +18,7 @@ const timeOptions = [
   { value: "EVENING", label: "Evening (4 PM - 7 PM)" },
 ];
 
-const steps = ["Contact Info", "Address", "Time Preference", "Select Date", "Select Time"];
+const steps = ["Service", "Contact Info", "Address", "Time Preference", "Select Date", "Select Time"];
 
 interface GeoData {
   lat: number;
@@ -52,6 +53,8 @@ export function BookingForm() {
     handleSubmit,
     trigger,
     getValues,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<BookingInput>({
     resolver: zodResolver(bookingSchema),
@@ -59,6 +62,8 @@ export function BookingForm() {
       state: "WA",
     },
   });
+
+  const selectedServiceType = watch("serviceType");
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && step < steps.length - 1) {
@@ -69,6 +74,7 @@ export function BookingForm() {
 
   const nextStep = async () => {
     const fieldsToValidate: (keyof BookingInput)[][] = [
+      ["serviceType"],
       ["customerName", "customerEmail", "customerPhone"],
       ["address", "city", "state", "zip"],
       ["preferredTime"],
@@ -80,7 +86,7 @@ export function BookingForm() {
     if (!valid) return;
 
     // Validate address and get zone info before proceeding to time selection
-    if (step === 1) {
+    if (step === 2) {
       setValidatingAddress(true);
       setError(null);
 
@@ -120,7 +126,7 @@ export function BookingForm() {
     }
 
     // Fetch available dates after time preference is selected
-    if (step === 2) {
+    if (step === 3) {
       if (!geoData) {
         setError("Address data missing. Please go back and re-enter your address.");
         return;
@@ -130,9 +136,9 @@ export function BookingForm() {
       setError(null);
 
       try {
-        const { preferredTime } = getValues();
+        const { preferredTime, serviceType } = getValues();
         const res = await fetch(
-          `/api/geogroup-availability?zoneId=${geoData.zoneId}&timeOfDay=${preferredTime}`
+          `/api/geogroup-availability?zoneId=${geoData.zoneId}&timeOfDay=${preferredTime}&serviceType=${serviceType}`
         );
 
         if (!res.ok) {
@@ -158,7 +164,7 @@ export function BookingForm() {
     }
 
     // Validate date selection before proceeding to time selection
-    if (step === 3) {
+    if (step === 4) {
       if (!selectedDateId) {
         setError("Please select an available date.");
         return;
@@ -215,7 +221,7 @@ export function BookingForm() {
       }
 
       const result = await res.json();
-      router.push(`/booking/confirmation?jobNumber=${result.jobNumber}`);
+      router.push(`/booking/confirmation?jobNumber=${result.jobNumber}&serviceType=${data.serviceType}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -253,8 +259,47 @@ export function BookingForm() {
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} onKeyDown={handleKeyDown} className="space-y-6">
-        {/* Step 1: Contact Info */}
+        {/* Step 0: Service Type */}
         {step === 0 && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-900 text-center">
+              What service do you need?
+            </h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {SERVICE_TYPE_OPTIONS.map((option) => (
+                <label
+                  key={option.value}
+                  className={`relative flex cursor-pointer rounded-xl border-2 p-6 transition-all ${
+                    selectedServiceType === option.value
+                      ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    value={option.value}
+                    className="sr-only"
+                    {...register("serviceType")}
+                  />
+                  <div>
+                    <p className="text-lg font-semibold text-gray-900">{option.label}</p>
+                  </div>
+                  {selectedServiceType === option.value && (
+                    <div className="absolute right-4 top-4 flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-white text-sm">
+                      &#10003;
+                    </div>
+                  )}
+                </label>
+              ))}
+            </div>
+            {errors.serviceType && (
+              <p className="text-sm text-red-600">{errors.serviceType.message}</p>
+            )}
+          </div>
+        )}
+
+        {/* Step 1: Contact Info */}
+        {step === 1 && (
           <div className="space-y-4">
             <Input
               label="Full Name"
@@ -283,7 +328,7 @@ export function BookingForm() {
         )}
 
         {/* Step 2: Address */}
-        {step === 1 && (
+        {step === 2 && (
           <div className="space-y-4">
             <Input
               label="Street Address"
@@ -326,7 +371,7 @@ export function BookingForm() {
         )}
 
         {/* Step 3: Time Preference */}
-        {step === 2 && (
+        {step === 3 && (
           <div className="space-y-4">
             <Select
               label="Preferred Time of Day"
@@ -353,7 +398,7 @@ export function BookingForm() {
         )}
 
         {/* Step 4: Select Date */}
-        {step === 3 && (
+        {step === 4 && (
           <div className="space-y-4">
             <div className="text-center mb-4">
               <h3 className="text-lg font-medium text-gray-900">
@@ -386,7 +431,7 @@ export function BookingForm() {
         )}
 
         {/* Step 5: Select Time */}
-        {step === 4 && (
+        {step === 5 && (
           <div className="space-y-4">
             <div className="text-center mb-4">
               <h3 className="text-lg font-medium text-gray-900">
@@ -440,7 +485,7 @@ export function BookingForm() {
             <Button
               type="button"
               onClick={nextStep}
-              disabled={validatingAddress || loadingDates || (step === 3 && !selectedDateId)}
+              disabled={validatingAddress || loadingDates || (step === 4 && !selectedDateId)}
             >
               {validatingAddress
                 ? "Validating Address..."

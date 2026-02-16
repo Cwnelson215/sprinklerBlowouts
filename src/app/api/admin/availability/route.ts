@@ -16,10 +16,12 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const zoneId = searchParams.get("zoneId");
+    const serviceType = searchParams.get("serviceType");
 
     const db = await getDb();
     const query: Record<string, unknown> = {};
     if (zoneId) query.zoneId = new ObjectId(zoneId);
+    if (serviceType) query.serviceType = serviceType;
 
     const dates = await db.collection<AvailableDate>("available_dates")
       .find(query)
@@ -105,6 +107,7 @@ export async function POST(req: NextRequest) {
       zoneId: new ObjectId(parsed.data.zoneId),
       date: new Date(parsed.data.date),
       timeOfDay: parsed.data.timeOfDay,
+      serviceType: parsed.data.serviceType,
       maxBookings: parsed.data.maxBookings ?? 20,
       disabledTimes: parsed.data.disabledTimes || [],
       createdAt: new Date(),

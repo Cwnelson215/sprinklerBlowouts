@@ -1,6 +1,9 @@
 import { z } from "zod";
 
 export const bookingSchema = z.object({
+  serviceType: z.enum(["SPRINKLER_BLOWOUT", "BACKFLOW_TESTING"], {
+    errorMap: () => ({ message: "Please select a service type" }),
+  }),
   customerName: z.string().min(2, "Name must be at least 2 characters"),
   customerEmail: z.string().email("Invalid email address"),
   customerPhone: z.string().optional(),
@@ -56,6 +59,9 @@ export const availableDateSchema = z.object({
   zoneId: z.string(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   timeOfDay: z.enum(["MORNING", "AFTERNOON", "EVENING"]),
+  serviceType: z.enum(["SPRINKLER_BLOWOUT", "BACKFLOW_TESTING"], {
+    errorMap: () => ({ message: "Please select a service type" }),
+  }),
   maxBookings: z.number().int().min(1).max(100).default(20),
   disabledTimes: z
     .array(z.string().regex(/^\d{2}:\d{2}$/))

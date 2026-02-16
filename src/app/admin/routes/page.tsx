@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Select } from "@/components/ui/select";
+import { SERVICE_CONFIGS } from "@/lib/service-config";
+import type { ServiceType } from "@/lib/types";
 import dynamic from "next/dynamic";
 import { generateGoogleMapsUrl, generateGpxString, downloadFile } from "@/lib/route-export";
 import { DEPOT } from "@/lib/constants";
@@ -32,6 +35,7 @@ interface RouteGroup {
   id: string;
   date: string;
   timeOfDay?: string;
+  serviceType?: string;
   houseCount: number;
   estimatedDuration: number | null;
   estimatedDistance: number | null;
@@ -44,15 +48,18 @@ export default function AdminRoutesPage() {
   const [selectedRoute, setSelectedRoute] = useState<RouteGroup | null>(null);
   const [loading, setLoading] = useState(true);
   const [optimizing, setOptimizing] = useState(false);
+  const [serviceTypeFilter, setServiceTypeFilter] = useState("");
   const router = useRouter();
 
   useEffect(() => {
     fetchRoutes();
-  }, []);
+  }, [serviceTypeFilter]);
 
   const fetchRoutes = async () => {
     try {
-      const res = await fetch("/api/admin/routes");
+      const params = new URLSearchParams();
+      if (serviceTypeFilter) params.set("serviceType", serviceTypeFilter);
+      const res = await fetch(`/api/admin/routes?${params}`);
       if (res.status === 401) {
         router.push("/admin/login");
         return;
@@ -89,9 +96,20 @@ export default function AdminRoutesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Route Groups</h1>
-        <Button onClick={triggerOptimization} disabled={optimizing}>
-          {optimizing ? "Optimizing..." : "Recalculate All Routes"}
-        </Button>
+        <div className="flex gap-4">
+          <Select
+            options={[
+              { value: "", label: "All Services" },
+              { value: "SPRINKLER_BLOWOUT", label: "Blowout" },
+              { value: "BACKFLOW_TESTING", label: "Backflow" },
+            ]}
+            value={serviceTypeFilter}
+            onChange={(e) => setServiceTypeFilter(e.target.value)}
+          />
+          <Button onClick={triggerOptimization} disabled={optimizing}>
+            {optimizing ? "Optimizing..." : "Recalculate All Routes"}
+          </Button>
+        </div>
       </div>
 
       {selectedRoute && (
@@ -201,6 +219,11 @@ export default function AdminRoutesPage() {
                   })}
                   {route.timeOfDay && ` - ${route.timeOfDay}`}
                 </p>
+                {route.serviceType && (
+                  <p className="text-xs text-gray-500">
+                    {SERVICE_CONFIGS[route.serviceType as ServiceType]?.shortLabel || route.serviceType}
+                  </p>
+                )}
                 <div className="mt-2 flex gap-4 text-sm text-gray-500">
                   <span>{route.houseCount} stops</span>
                   {route.estimatedDistance && (

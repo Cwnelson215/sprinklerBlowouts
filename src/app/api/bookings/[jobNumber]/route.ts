@@ -39,6 +39,7 @@ export async function GET(
 
     return NextResponse.json({
       jobNumber: booking.jobNumber,
+      serviceType: booking.serviceType,
       customerName: booking.customerName,
       customerEmail: booking.customerEmail,
       customerPhone: booking.customerPhone,

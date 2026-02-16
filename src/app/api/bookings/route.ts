@@ -3,8 +3,9 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { bookingSchema } from "@/lib/validation";
 import { generateJobNumber } from "@/lib/utils";
+import { getServiceConfig } from "@/lib/service-config";
 import { scheduleJob, JOBS } from "@/lib/queue";
-import { Booking, AvailableDate } from "@/lib/types";
+import { Booking, AvailableDate, ServiceType } from "@/lib/types";
 import { generateTimeSlots } from "@/lib/time-slots";
 
 export async function POST(req: NextRequest) {
@@ -49,6 +50,7 @@ export async function POST(req: NextRequest) {
         .collection<AvailableDate>("available_dates")
         .find({
           zoneId: availableDate.zoneId,
+          serviceType: data.serviceType,
           $or: [{ date: availableDate.date }, { date: dateStr as unknown as Date }],
         })
         .toArray();
@@ -92,10 +94,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Generate unique job number
+    const jobPrefix = getServiceConfig(data.serviceType as ServiceType).jobPrefix;
     let jobNumber: string;
     let attempts = 0;
     do {
-      jobNumber = generateJobNumber();
+      jobNumber = generateJobNumber(jobPrefix);
       const existing = await bookings.findOne({ jobNumber });
       if (!existing) break;
       attempts++;
@@ -116,6 +119,7 @@ export async function POST(req: NextRequest) {
 
     const bookingDoc = {
       jobNumber,
+      serviceType: data.serviceType,
       customerName: data.customerName,
       customerEmail: data.customerEmail,
       customerPhone: data.customerPhone || null,

@@ -1,6 +1,12 @@
 import { ObjectId } from "mongodb";
 
 // Enums as const objects for runtime use
+export const ServiceType = {
+  SPRINKLER_BLOWOUT: "SPRINKLER_BLOWOUT",
+  BACKFLOW_TESTING: "BACKFLOW_TESTING",
+} as const;
+export type ServiceType = (typeof ServiceType)[keyof typeof ServiceType];
+
 export const TimeOfDay = {
   MORNING: "MORNING",
   AFTERNOON: "AFTERNOON",
@@ -58,6 +64,7 @@ export interface AvailableDate {
   zoneId: ObjectId;
   date: Date;
   timeOfDay: TimeOfDay;
+  serviceType: ServiceType;
   maxBookings: number;
   disabledTimes: string[]; // e.g., ["08:00", "09:30"] - disabled by admin
   createdAt: Date;
@@ -66,6 +73,7 @@ export interface AvailableDate {
 export interface Booking {
   _id: ObjectId;
   jobNumber: string;
+  serviceType: ServiceType;
   customerName: string;
   customerEmail: string;
   customerPhone?: string | null;
@@ -92,6 +100,7 @@ export interface RouteGroup {
   zoneId: ObjectId;
   date: Date;
   timeOfDay?: TimeOfDay;
+  serviceType: ServiceType;
   optimizedRoute?: unknown;
   estimatedDuration?: number | null;
   estimatedDistance?: number | null;

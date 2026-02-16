@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Sprinkler Blowout Service",
-  description: "Schedule your sprinkler blowout service online",
+  title: "Sprinkler Services",
+  description: "Schedule sprinkler blowout and backflow prevention testing services online",
 };
 
 export default function RootLayout({

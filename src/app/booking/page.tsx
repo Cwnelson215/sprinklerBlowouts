@@ -7,13 +7,13 @@ export default function BookingPage() {
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <Link href="/" className="text-xl font-bold text-brand-700">
-            Sprinkler Blowouts
+            Sprinkler Services
           </Link>
         </div>
       </header>
 
       <main className="mx-auto max-w-4xl px-4 py-12">
-        <h1 className="mb-2 text-2xl font-bold">Schedule Your Blowout</h1>
+        <h1 className="mb-2 text-2xl font-bold">Schedule a Service</h1>
         <p className="mb-8 text-gray-600">
           Fill out the form below and we&apos;ll get you scheduled.
         </p>

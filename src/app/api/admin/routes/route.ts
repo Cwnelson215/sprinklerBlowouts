@@ -15,11 +15,13 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const zoneId = searchParams.get("zoneId");
     const date = searchParams.get("date");
+    const serviceType = searchParams.get("serviceType");
 
     const db = await getDb();
     const query: Record<string, unknown> = {};
     if (zoneId) query.zoneId = new ObjectId(zoneId);
     if (date) query.date = new Date(date);
+    if (serviceType) query.serviceType = serviceType;
 
     const routes = await db.collection<RouteGroup>("route_groups")
       .find(query)
@@ -76,11 +78,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { zoneId, date } = body;
+    const { zoneId, date, serviceType: bodyServiceType } = body;
 
     await scheduleJob(JOBS.OPTIMIZE_ROUTES, {
       zoneId: zoneId || undefined,
       date: date || undefined,
+      serviceType: bodyServiceType || undefined,
     });
 
     return NextResponse.json({ message: "Route optimization queued" });

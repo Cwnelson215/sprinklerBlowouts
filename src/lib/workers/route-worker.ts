@@ -11,6 +11,7 @@ interface AssignRouteGroupData {
 interface OptimizeRoutesData {
   zoneId?: string;
   date?: string;
+  serviceType?: string;
   recurring?: boolean;
   cron?: string;
   timezone?: string;
@@ -48,10 +49,11 @@ export async function handleAssignRouteGroup(data: AssignRouteGroupData) {
     availableDate.date.getUTCDate()
   ));
 
-  // Find or create a route group for this zone/date (combine all time slots)
+  // Find or create a route group for this zone/date/serviceType (combine all time slots)
   let routeGroup = await db.collection<RouteGroup>("route_groups").findOne({
     zoneId: booking.zoneId,
     date: normalizedDate,
+    serviceType: booking.serviceType,
   });
 
   if (!routeGroup) {
@@ -59,6 +61,7 @@ export async function handleAssignRouteGroup(data: AssignRouteGroupData) {
     const result = await db.collection("route_groups").insertOne({
       zoneId: booking.zoneId,
       date: normalizedDate,
+      serviceType: booking.serviceType,
       houseCount: 0,
       createdAt: now,
       updatedAt: now,
@@ -98,7 +101,7 @@ export async function handleAssignRouteGroup(data: AssignRouteGroupData) {
 }
 
 export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
-  const { zoneId, date } = data;
+  const { zoneId, date, serviceType } = data;
   const db = await getDb();
 
   // First, create route groups for any scheduled bookings that don't have one
@@ -111,6 +114,7 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
     routeGroupId: null,
   };
   if (zoneId) bookingQuery.zoneId = new ObjectId(zoneId);
+  if (serviceType) bookingQuery.serviceType = serviceType;
 
   const unassignedBookings = await db.collection<Booking>("bookings")
     .find(bookingQuery)
@@ -145,10 +149,11 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
       if (normalizedDate.getTime() !== normalizedFilter.getTime()) continue;
     }
 
-    // Find or create route group for this zone/date
+    // Find or create route group for this zone/date/serviceType
     let routeGroup = await db.collection<RouteGroup>("route_groups").findOne({
       zoneId: booking.zoneId,
       date: normalizedDate,
+      serviceType: booking.serviceType,
     });
 
     if (!routeGroup) {
@@ -156,6 +161,7 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
       const result = await db.collection("route_groups").insertOne({
         zoneId: booking.zoneId,
         date: normalizedDate,
+        serviceType: booking.serviceType,
         houseCount: 0,
         createdAt: now,
         updatedAt: now,
@@ -191,6 +197,7 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
   const query: Record<string, unknown> = {};
   if (zoneId) query.zoneId = new ObjectId(zoneId);
   if (date) query.date = new Date(date);
+  if (serviceType) query.serviceType = serviceType;
 
   const routeGroups = await db.collection<RouteGroup>("route_groups")
     .find(query)

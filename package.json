@@ -9,7 +9,8 @@
     "up": "pulumi up",
     "destroy": "pulumi destroy",
     "seed:zone": "npx tsx --env-file=src/.env.local scripts/seed-zone.ts",
-    "seed:bookings": "npx tsx --env-file=src/.env.local scripts/seed-bookings.ts"
+    "seed:bookings": "npx tsx --env-file=src/.env.local scripts/seed-bookings.ts",
+    "migrate:service-type": "npx tsx --env-file=src/.env.local scripts/migrate-service-type.ts"
   },
   "dependencies": {
     "@pulumi/aws": "^6.0.0",
