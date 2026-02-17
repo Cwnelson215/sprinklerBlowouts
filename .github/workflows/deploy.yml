@@ -18,8 +18,29 @@ env:
   AWS_REGION: us-east-1
 
 jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install app dependencies
+        run: cd src && npm ci
+
+      - name: Run tests
+        run: cd src && npm test
+
   build-and-deploy:
     name: Build and Deploy
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
