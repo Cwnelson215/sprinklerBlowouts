@@ -21,12 +21,6 @@ export default function HomePage() {
             >
               Check Booking
             </Link>
-            <Link
-              href="/booking"
-              className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-            >
-              Book Now
-            </Link>
           </nav>
         </div>
       </header>
@@ -43,7 +37,7 @@ export default function HomePage() {
         </div>
 
         <div className="mt-12 grid gap-8 sm:grid-cols-2">
-          <div className="rounded-xl border bg-white p-8 shadow-sm">
+          <div className="flex flex-col rounded-xl border bg-white p-8 shadow-sm">
             <h3 className="text-xl font-semibold text-gray-900">Sprinkler Blowout</h3>
             <p className="mt-3 text-gray-600">
               Protect your irrigation system from freeze damage. We use
@@ -51,21 +45,21 @@ export default function HomePage() {
               lines, heads, and valves.
             </p>
             <Link
-              href="/booking"
-              className="mt-6 inline-block rounded-md bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
+              href="/booking?service=SPRINKLER_BLOWOUT"
+              className="mt-auto pt-6 inline-block rounded-md bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 text-center"
             >
               Book a Blowout
             </Link>
           </div>
-          <div className="rounded-xl border bg-white p-8 shadow-sm">
+          <div className="flex flex-col rounded-xl border bg-white p-8 shadow-sm">
             <h3 className="text-xl font-semibold text-gray-900">Backflow Prevention Testing</h3>
             <p className="mt-3 text-gray-600">
               Annual backflow preventer testing to keep your water supply safe
               and compliant with local regulations.
             </p>
             <Link
-              href="/booking"
-              className="mt-6 inline-block rounded-md bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
+              href="/booking?service=BACKFLOW_TESTING"
+              className="mt-auto pt-6 inline-block rounded-md bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 text-center"
             >
               Book a Backflow Test
             </Link>

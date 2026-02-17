@@ -25,7 +25,10 @@ export function createRequest(
     init.body = JSON.stringify(body);
   }
 
-  const req = new NextRequest(new URL(url, "http://localhost:3000"), init);
+  const req = new NextRequest(
+    new URL(url, "http://localhost:3000"),
+    init as import("next/dist/server/web/spec-extension/request").RequestInit
+  );
 
   if (cookies) {
     for (const [name, value] of Object.entries(cookies)) {

@@ -13,7 +13,7 @@ beforeAll(async () => {
   process.env.JWT_SECRET = "test-jwt-secret-for-testing";
   process.env.EMAIL_DOMAIN = "test.example.com";
   process.env.NEXT_PUBLIC_APP_URL = "https://test.example.com";
-  process.env.NODE_ENV = "test";
+  (process.env as Record<string, string>).NODE_ENV = "test";
 
   client = new MongoClient(uri);
   await client.connect();
