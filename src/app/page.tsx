@@ -44,9 +44,10 @@ export default function HomePage() {
               compressed air to blow out all remaining water from your sprinkler
               lines, heads, and valves.
             </p>
+            <div className="mt-auto" />
             <Link
               href="/booking?service=SPRINKLER_BLOWOUT"
-              className="mt-auto pt-6 inline-block rounded-md bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 text-center"
+              className="mt-6 self-start rounded-md bg-brand-600 px-4 py-1.5 text-base font-semibold text-white shadow-sm hover:bg-brand-700 text-center"
             >
               Book a Blowout
             </Link>
@@ -57,9 +58,10 @@ export default function HomePage() {
               Annual backflow preventer testing to keep your water supply safe
               and compliant with local regulations.
             </p>
+            <div className="mt-auto" />
             <Link
               href="/booking?service=BACKFLOW_TESTING"
-              className="mt-auto pt-6 inline-block rounded-md bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 text-center"
+              className="mt-6 self-start rounded-md bg-brand-600 px-4 py-1.5 text-base font-semibold text-white shadow-sm hover:bg-brand-700 text-center"
             >
               Book a Backflow Test
             </Link>
