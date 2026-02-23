@@ -8,7 +8,6 @@ export default defineConfig({
   test: {
     environment: "node",
     setupFiles: ["./test/setup.ts", "./test/component-setup.ts"],
-    environmentMatchGlobs: [["**/*.test.tsx", "jsdom"]],
     testTimeout: 30000,
     coverage: {
       provider: "v8",
