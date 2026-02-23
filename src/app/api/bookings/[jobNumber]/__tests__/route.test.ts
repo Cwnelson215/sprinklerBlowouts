@@ -47,6 +47,83 @@ describe("GET /api/bookings/[jobNumber]", () => {
     expect(body.zoneName).toBe("Tri-Cities");
     expect(body.scheduledDate).toBeDefined();
   });
+
+  it("returns null enrichment fields when no zone or available date", async () => {
+    const booking = await createTestBooking();
+
+    const req = createRequest(`/api/bookings/${booking.jobNumber}`);
+    const res = await GET(req, makeParams(booking.jobNumber));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.jobNumber).toBe(booking.jobNumber);
+    expect(body.zoneName).toBeUndefined();
+    expect(body.scheduledDate).toBeUndefined();
+    expect(body.scheduledTime).toBeUndefined();
+  });
+
+  it("handles orphaned zoneId gracefully", async () => {
+    const { ObjectId } = await import("mongodb");
+    const orphanedZoneId = new ObjectId();
+    const booking = await createTestBooking({ zoneId: orphanedZoneId });
+
+    const req = createRequest(`/api/bookings/${booking.jobNumber}`);
+    const res = await GET(req, makeParams(booking.jobNumber));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.jobNumber).toBe(booking.jobNumber);
+    expect(body.zoneName).toBeUndefined();
+  });
+
+  it("handles orphaned availableDateId gracefully", async () => {
+    const { ObjectId } = await import("mongodb");
+    const orphanedDateId = new ObjectId();
+    const booking = await createTestBooking({ availableDateId: orphanedDateId });
+
+    const req = createRequest(`/api/bookings/${booking.jobNumber}`);
+    const res = await GET(req, makeParams(booking.jobNumber));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.jobNumber).toBe(booking.jobNumber);
+    expect(body.scheduledDate).toBeUndefined();
+    expect(body.scheduledTime).toBeUndefined();
+  });
+
+  it("returns all expected fields in the response", async () => {
+    const zone = await createTestZone();
+    const avDate = await createTestAvailableDate(zone._id);
+    const booking = await createTestBooking({
+      zoneId: zone._id,
+      availableDateId: avDate._id,
+      notes: "Gate code: 1234",
+    });
+
+    const req = createRequest(`/api/bookings/${booking.jobNumber}`);
+    const res = await GET(req, makeParams(booking.jobNumber));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    expect(body).toEqual(
+      expect.objectContaining({
+        jobNumber: booking.jobNumber,
+        serviceType: "SPRINKLER_BLOWOUT",
+        customerName: "John Doe",
+        customerEmail: "john@example.com",
+        customerPhone: "509-555-1234",
+        address: "123 Main St",
+        city: "Richland",
+        state: "WA",
+        zip: "99352",
+        preferredTime: "MORNING",
+        status: "PENDING",
+        notes: "Gate code: 1234",
+        zoneName: "Tri-Cities",
+      })
+    );
+    expect(body.scheduledDate).toBeDefined();
+    expect(body.scheduledTime).toBe("MORNING");
+    expect(body.createdAt).toBeDefined();
+    expect(body.updatedAt).toBeDefined();
+  });
 });
 
 describe("PATCH /api/bookings/[jobNumber]", () => {
