@@ -79,6 +79,12 @@ export default function LookupPage() {
               {loading ? "Looking up..." : "Find Booking"}
             </Button>
           </form>
+
+          <div className="mt-4 text-center">
+            <Link href="/" className="text-sm text-brand-600 hover:underline">
+              Back to Home
+            </Link>
+          </div>
         </div>
       </main>
     </div>

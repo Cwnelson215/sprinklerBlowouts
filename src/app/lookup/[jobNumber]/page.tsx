@@ -270,6 +270,12 @@ export default function BookingDetailPage() {
             </Button>
           </div>
         )}
+
+        <div className="mt-6 text-center">
+          <Link href="/" className="text-sm text-brand-600 hover:underline">
+            Back to Home
+          </Link>
+        </div>
       </main>
     </div>
   );
