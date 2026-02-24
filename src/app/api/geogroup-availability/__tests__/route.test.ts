@@ -135,6 +135,56 @@ describe("GET /api/geogroup-availability", () => {
     expect(dateIds).not.toContain(avDate2._id.toHexString());
   });
 
+  it("subsequent bookings: falls back to all dates when geo-grouped dates are fully booked", async () => {
+    const zone = await createTestZone();
+
+    // Wednesday Oct 14, 2026 — geo-grouped date (will be fully booked)
+    const fullyBookedDate = await createTestAvailableDate(zone._id, {
+      date: new Date("2026-10-14T00:00:00.000Z"),
+      timeOfDay: "AFTERNOON",
+      serviceType: "SPRINKLER_BLOWOUT",
+    });
+
+    // Thursday Oct 15, 2026 — fallback date (has open slots)
+    const fallbackDate = await createTestAvailableDate(zone._id, {
+      date: new Date("2026-10-15T00:00:00.000Z"),
+      timeOfDay: "AFTERNOON",
+      serviceType: "SPRINKLER_BLOWOUT",
+    });
+
+    // Book all 5 AFTERNOON slots on the geo-grouped date (12:00, 12:45, 13:30, 14:15, 15:00)
+    const allAfternoonTimes = ["12:00", "12:45", "13:30", "14:15", "15:00"];
+    for (const time of allAfternoonTimes) {
+      await createTestBooking({
+        zoneId: zone._id,
+        availableDateId: fullyBookedDate._id,
+        preferredTime: "AFTERNOON",
+        serviceType: "SPRINKLER_BLOWOUT",
+        status: "SCHEDULED",
+        bookedTime: time,
+      });
+    }
+
+    const req = createRequest(
+      `/api/geogroup-availability?zoneId=${zone._id.toHexString()}&timeOfDay=AFTERNOON&serviceType=SPRINKLER_BLOWOUT`
+    );
+    const res = await GET(req);
+    const body = await res.json();
+
+    expect(body.isFirstInZone).toBe(false);
+    // The fully booked date should NOT appear (no available times)
+    const bookedDateEntry = body.availableDates.find(
+      (d: { id: string }) => d.id === fullyBookedDate._id.toHexString()
+    );
+    expect(bookedDateEntry).toBeUndefined();
+    // The fallback date SHOULD appear (has open slots)
+    const fallbackEntry = body.availableDates.find(
+      (d: { id: string }) => d.id === fallbackDate._id.toHexString()
+    );
+    expect(fallbackEntry).toBeDefined();
+    expect(fallbackEntry.availableTimes.length).toBeGreaterThan(0);
+  });
+
   it("excludes disabled and booked times from available times", async () => {
     const zone = await createTestZone();
     // Wednesday

@@ -247,6 +247,43 @@ export async function GET(req: NextRequest) {
           }
         }
       }
+
+      // Fallback: if all geo-grouped dates are fully booked, show all valid dates
+      // (same behavior as first-in-zone) so the customer isn't stuck
+      if (availableDates.length === 0) {
+        const fallbackDates = await db.collection<AvailableDate>("available_dates")
+          .find({
+            zoneId: zoneObjectId,
+            timeOfDay: timeOfDay,
+            serviceType: serviceType as ServiceType,
+            $or: [
+              { date: { $gte: today } },
+              { date: { $gte: todayStr as unknown as Date } },
+            ],
+          })
+          .sort({ date: 1 })
+          .toArray();
+
+        for (const d of fallbackDates) {
+          const dateObj = normalizeDate(d.date);
+          if (!isValidDayForTimeSlot(dateObj, timeOfDay)) {
+            continue;
+          }
+
+          const dateStr = dateObj.toISOString().split("T")[0];
+          const availableTimesForDate = await calculateAvailableTimesForDate(d, dateStr);
+
+          if (availableTimesForDate.length > 0) {
+            availableDates.push({
+              id: d._id.toHexString(),
+              date: dateStr,
+              dayOfWeek: dateObj.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" }),
+              spotsRemaining: availableTimesForDate.length,
+              availableTimes: availableTimesForDate,
+            });
+          }
+        }
+      }
     }
 
     return NextResponse.json({
