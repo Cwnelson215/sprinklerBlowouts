@@ -3,6 +3,9 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAdminFromRequest } from "@/lib/auth";
 import { Booking, ServiceZone, AvailableDate, BookingStatus } from "@/lib/types";
+import { escapeRegex, clampPagination, isValidObjectId } from "@/lib/security";
+
+const VALID_STATUSES = Object.values(BookingStatus);
 
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromRequest(req);
@@ -12,25 +15,38 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
-    const status = searchParams.get("status") as BookingStatus | null;
+    const status = searchParams.get("status");
     const zoneId = searchParams.get("zoneId");
     const serviceType = searchParams.get("serviceType");
     const search = searchParams.get("search");
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "20");
+    const { page, limit } = clampPagination(
+      searchParams.get("page"),
+      searchParams.get("limit")
+    );
 
     const db = await getDb();
     const query: Record<string, unknown> = {};
 
-    if (status) query.status = status;
-    if (zoneId) query.zoneId = new ObjectId(zoneId);
+    if (status) {
+      if (!VALID_STATUSES.includes(status as BookingStatus)) {
+        return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+      }
+      query.status = status;
+    }
+    if (zoneId) {
+      if (!isValidObjectId(zoneId)) {
+        return NextResponse.json({ error: "Invalid zoneId" }, { status: 400 });
+      }
+      query.zoneId = new ObjectId(zoneId);
+    }
     if (serviceType) query.serviceType = serviceType;
     if (search) {
+      const escaped = escapeRegex(search);
       query.$or = [
-        { jobNumber: { $regex: search, $options: "i" } },
-        { customerName: { $regex: search, $options: "i" } },
-        { customerEmail: { $regex: search, $options: "i" } },
-        { address: { $regex: search, $options: "i" } },
+        { jobNumber: { $regex: escaped, $options: "i" } },
+        { customerName: { $regex: escaped, $options: "i" } },
+        { customerEmail: { $regex: escaped, $options: "i" } },
+        { address: { $regex: escaped, $options: "i" } },
       ];
     }
 
@@ -108,6 +124,14 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
+    if (!isValidObjectId(id)) {
+      return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+    }
+
+    if (!VALID_STATUSES.includes(status as BookingStatus)) {
+      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    }
+
     const db = await getDb();
     const result = await db.collection<Booking>("bookings").findOneAndUpdate(
       { _id: new ObjectId(id) },
@@ -141,6 +165,10 @@ export async function DELETE(req: NextRequest) {
 
     if (!id) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
+
+    if (!isValidObjectId(id)) {
+      return NextResponse.json({ error: "Invalid id" }, { status: 400 });
     }
 
     const db = await getDb();

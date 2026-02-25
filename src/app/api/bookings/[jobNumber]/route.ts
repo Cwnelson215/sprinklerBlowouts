@@ -4,11 +4,35 @@ import { getDb } from "@/lib/mongodb";
 import { bookingUpdateSchema } from "@/lib/validation";
 import { scheduleJob, JOBS } from "@/lib/queue";
 import { Booking, AvailableDate, ServiceZone } from "@/lib/types";
+import { checkRateLimit } from "@/lib/rate-limit";
+
+function maskEmail(email: string): string {
+  const [local, domain] = email.split("@");
+  if (!domain || local.length <= 2) return `**@${domain || "***"}`;
+  return `${local.slice(0, 2)}${"*".repeat(local.length - 2)}@${domain}`;
+}
+
+function maskPhoneSimple(phone: string | null | undefined): string | null | undefined {
+  if (!phone) return phone;
+  const cleaned = phone.replace(/\D/g, "");
+  if (cleaned.length <= 6) return phone;
+  const visible = cleaned.slice(0, 2) + "*".repeat(cleaned.length - 6) + cleaned.slice(-4);
+  return visible;
+}
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ jobNumber: string }> }
 ) {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const rl = checkRateLimit(`lookup:${ip}`, 30, 60 * 1000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.retryAfterMs || 0) / 1000)) } }
+    );
+  }
+
   try {
     const { jobNumber } = await params;
     const db = await getDb();
@@ -41,8 +65,8 @@ export async function GET(
       jobNumber: booking.jobNumber,
       serviceType: booking.serviceType,
       customerName: booking.customerName,
-      customerEmail: booking.customerEmail,
-      customerPhone: booking.customerPhone,
+      customerEmail: maskEmail(booking.customerEmail),
+      customerPhone: maskPhoneSimple(booking.customerPhone),
       address: booking.address,
       city: booking.city,
       state: booking.state,
@@ -69,8 +93,17 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ jobNumber: string }> }
 ) {
+  const { jobNumber } = await params;
+
+  const rl = checkRateLimit(`update:${jobNumber}`, 10, 60 * 60 * 1000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many update attempts. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.retryAfterMs || 0) / 1000)) } }
+    );
+  }
+
   try {
-    const { jobNumber } = await params;
     const body = await req.json();
     const parsed = bookingUpdateSchema.safeParse(body);
 

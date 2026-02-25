@@ -1,7 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { createRequest } from "@/test/helpers/request";
 import { createTestAdmin } from "@/test/helpers/db";
 import { POST, DELETE, PUT } from "../route";
+
+beforeAll(() => {
+  process.env.ALLOW_ADMIN_SEED = "true";
+});
 
 describe("POST /api/admin/auth (login)", () => {
   it("returns 400 for invalid input", async () => {
@@ -52,7 +56,7 @@ describe("PUT /api/admin/auth (seed)", () => {
   it("creates first admin with 201", async () => {
     const req = createRequest("/api/admin/auth", {
       method: "PUT",
-      body: { email: "newadmin@example.com", password: "securepassword" },
+      body: { email: "newadmin@example.com", password: "SecurePass123" },
     });
     const res = await PUT(req);
     expect(res.status).toBe(201);
@@ -65,7 +69,7 @@ describe("PUT /api/admin/auth (seed)", () => {
     await createTestAdmin();
     const req = createRequest("/api/admin/auth", {
       method: "PUT",
-      body: { email: "another@example.com", password: "securepassword" },
+      body: { email: "another@example.com", password: "SecurePass123" },
     });
     const res = await PUT(req);
     expect(res.status).toBe(400);

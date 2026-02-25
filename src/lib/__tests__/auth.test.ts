@@ -73,7 +73,7 @@ describe("setAuthCookie", () => {
     expect(cookie).toContain("admin_token=mytoken123");
     expect(cookie).toContain("HttpOnly");
     expect(cookie).toContain("SameSite=Strict");
-    expect(cookie).toContain("Max-Age=28800"); // 8 * 60 * 60
+    expect(cookie).toContain("Max-Age=7200"); // 2 * 60 * 60
     expect(cookie).toContain("Path=/");
   });
 });

@@ -7,8 +7,18 @@ import { getServiceConfig } from "@/lib/service-config";
 import { scheduleJob, JOBS } from "@/lib/queue";
 import { Booking, AvailableDate, ServiceType } from "@/lib/types";
 import { generateTimeSlots } from "@/lib/time-slots";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const rl = checkRateLimit(`booking:${ip}`, 10, 60 * 60 * 1000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many booking requests. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.retryAfterMs || 0) / 1000)) } }
+    );
+  }
+
   try {
     const body = await req.json();
     const parsed = bookingSchema.safeParse(body);
@@ -78,7 +88,9 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Check for race condition - is this time already booked?
+      // Check for existing booking at this time slot
+      // NOTE: A MongoDB unique partial index on {availableDateId, bookedTime}
+      // where status != "CANCELLED" would fully prevent race conditions here.
       const existingBooking = await bookings.findOne({
         availableDateId: availableDateObjectId,
         bookedTime: data.bookedTime,

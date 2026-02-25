@@ -4,17 +4,17 @@ export const bookingSchema = z.object({
   serviceType: z.enum(["SPRINKLER_BLOWOUT", "BACKFLOW_TESTING"], {
     errorMap: () => ({ message: "Please select a service type" }),
   }),
-  customerName: z.string().min(2, "Name must be at least 2 characters"),
-  customerEmail: z.string().email("Invalid email address"),
-  customerPhone: z.string().optional(),
-  address: z.string().min(5, "Address is required"),
-  city: z.string().min(2, "City is required"),
+  customerName: z.string().min(2, "Name must be at least 2 characters").max(100),
+  customerEmail: z.string().email("Invalid email address").max(254),
+  customerPhone: z.string().max(20).optional(),
+  address: z.string().min(10, "Please enter a full street address").max(200),
+  city: z.string().min(2, "City is required").max(100),
   state: z.string().length(2, "Use 2-letter state code").default("WA"),
   zip: z.string().regex(/^\d{5}(-\d{4})?$/, "Invalid ZIP code"),
   preferredTime: z.enum(["MORNING", "AFTERNOON", "EVENING"], {
     errorMap: () => ({ message: "Please select a preferred time" }),
   }),
-  notes: z.string().optional(),
+  notes: z.string().max(1000).optional(),
   lat: z.number().optional(),
   lng: z.number().optional(),
   zoneId: z.string().optional(),
@@ -29,22 +29,28 @@ export type BookingInput = z.infer<typeof bookingSchema>;
 
 export const bookingUpdateSchema = z.object({
   availableDateId: z.string().optional(),
-  customerName: z.string().min(2).optional(),
-  customerEmail: z.string().email().optional(),
-  customerPhone: z.string().optional(),
-  notes: z.string().optional(),
+  customerName: z.string().min(2).max(100).optional(),
+  customerEmail: z.string().email().max(254).optional(),
+  customerPhone: z.string().max(20).optional(),
+  notes: z.string().max(1000).optional(),
   status: z.enum(["CANCELLED"]).optional(),
 });
 
 export type BookingUpdateInput = z.infer<typeof bookingUpdateSchema>;
 
 export const adminLoginSchema = z.object({
-  password: z.string().min(8),
+  password: z.string().min(12, "Password must be at least 12 characters"),
 });
 
 export const adminSeedSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8),
+  password: z
+    .string()
+    .min(12, "Password must be at least 12 characters")
+    .regex(
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+      "Password must contain uppercase, lowercase, and a number"
+    ),
 });
 
 export const zoneSchema = z.object({

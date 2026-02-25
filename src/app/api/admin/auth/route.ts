@@ -4,8 +4,18 @@ import { getDb } from "@/lib/mongodb";
 import { adminLoginSchema, adminSeedSchema } from "@/lib/validation";
 import { signToken, setAuthCookie, clearAuthCookie } from "@/lib/auth";
 import { AdminUser } from "@/lib/types";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const rl = checkRateLimit(`login:${ip}`, 5, 15 * 60 * 1000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many login attempts. Try again later." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.retryAfterMs || 0) / 1000)) } }
+    );
+  }
+
   try {
     const body = await req.json();
     const parsed = adminLoginSchema.safeParse(body);
@@ -67,6 +77,10 @@ export async function DELETE() {
 
 // Seed endpoint - creates initial admin if none exist
 export async function PUT(req: NextRequest) {
+  if (process.env.ALLOW_ADMIN_SEED !== "true") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   try {
     const db = await getDb();
     const count = await db.collection<AdminUser>("admin_users").countDocuments();
@@ -91,7 +105,7 @@ export async function PUT(req: NextRequest) {
     const passwordHash = await hash(parsed.data.password, 12);
     const now = new Date();
 
-    const result = await db.collection("admin_users").insertOne({
+    await db.collection("admin_users").insertOne({
       email: parsed.data.email,
       passwordHash,
       role: "SUPER_ADMIN",

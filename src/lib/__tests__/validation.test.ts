@@ -113,7 +113,7 @@ describe("adminSeedSchema", () => {
   it("accepts valid input", () => {
     const result = adminSeedSchema.safeParse({
       email: "admin@example.com",
-      password: "longpassword",
+      password: "LongPassword1",
     });
     expect(result.success).toBe(true);
   });
@@ -121,7 +121,7 @@ describe("adminSeedSchema", () => {
   it("rejects invalid email", () => {
     const result = adminSeedSchema.safeParse({
       email: "not-an-email",
-      password: "longpassword",
+      password: "LongPassword1",
     });
     expect(result.success).toBe(false);
   });
