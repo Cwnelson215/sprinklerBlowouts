@@ -1,7 +1,7 @@
-import { ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { getDb } from "../mongodb";
 import { optimizeRoute } from "../route-optimizer";
-import { Booking, RouteGroup, AvailableDate } from "../types";
+import { Booking, RouteGroup, AvailableDate, ServiceType } from "../types";
 import { DEPOT } from "../constants";
 
 interface AssignRouteGroupData {
@@ -15,6 +15,54 @@ interface OptimizeRoutesData {
   recurring?: boolean;
   cron?: string;
   timezone?: string;
+}
+
+function normalizeToMidnightUTC(date: Date): Date {
+  return new Date(Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate()
+  ));
+}
+
+async function findOrCreateRouteGroup(
+  db: Db,
+  zoneId: ObjectId,
+  date: Date,
+  serviceType: ServiceType
+): Promise<RouteGroup | null> {
+  let routeGroup = await db.collection<RouteGroup>("route_groups").findOne({
+    zoneId,
+    date,
+    serviceType,
+  });
+
+  if (!routeGroup) {
+    const now = new Date();
+    const result = await db.collection("route_groups").insertOne({
+      zoneId,
+      date,
+      serviceType,
+      houseCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    routeGroup = await db.collection<RouteGroup>("route_groups").findOne({
+      _id: result.insertedId,
+    });
+  }
+
+  return routeGroup;
+}
+
+async function updateRouteGroupHouseCount(db: Db, routeGroupId: ObjectId): Promise<void> {
+  const count = await db.collection<Booking>("bookings").countDocuments({
+    routeGroupId,
+  });
+  await db.collection<RouteGroup>("route_groups").updateOne(
+    { _id: routeGroupId },
+    { $set: { houseCount: count, updatedAt: new Date() } }
+  );
 }
 
 export async function handleAssignRouteGroup(data: AssignRouteGroupData) {
@@ -42,34 +90,9 @@ export async function handleAssignRouteGroup(data: AssignRouteGroupData) {
     return;
   }
 
-  // Normalize date to midnight UTC for consistent same-day grouping
-  const normalizedDate = new Date(Date.UTC(
-    availableDate.date.getUTCFullYear(),
-    availableDate.date.getUTCMonth(),
-    availableDate.date.getUTCDate()
-  ));
+  const normalizedDate = normalizeToMidnightUTC(availableDate.date);
 
-  // Find or create a route group for this zone/date/serviceType (combine all time slots)
-  let routeGroup = await db.collection<RouteGroup>("route_groups").findOne({
-    zoneId: booking.zoneId,
-    date: normalizedDate,
-    serviceType: booking.serviceType,
-  });
-
-  if (!routeGroup) {
-    const now = new Date();
-    const result = await db.collection("route_groups").insertOne({
-      zoneId: booking.zoneId,
-      date: normalizedDate,
-      serviceType: booking.serviceType,
-      houseCount: 0,
-      createdAt: now,
-      updatedAt: now,
-    });
-    routeGroup = await db.collection<RouteGroup>("route_groups").findOne({
-      _id: result.insertedId,
-    });
-  }
+  const routeGroup = await findOrCreateRouteGroup(db, booking.zoneId, normalizedDate, booking.serviceType);
 
   if (!routeGroup) {
     console.error(`Failed to create route group for booking ${bookingId}`);
@@ -87,15 +110,7 @@ export async function handleAssignRouteGroup(data: AssignRouteGroupData) {
     }
   );
 
-  // Update house count
-  const count = await db.collection<Booking>("bookings").countDocuments({
-    routeGroupId: routeGroup._id,
-  });
-
-  await db.collection<RouteGroup>("route_groups").updateOne(
-    { _id: routeGroup._id },
-    { $set: { houseCount: count, updatedAt: new Date() } }
-  );
+  await updateRouteGroupHouseCount(db, routeGroup._id);
 
   console.log(`Assigned booking ${booking.jobNumber} to route group ${routeGroup._id}`);
 }
@@ -131,46 +146,15 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
 
     if (!availableDate) continue;
 
-    // Normalize date to midnight UTC for consistent same-day grouping
-    const normalizedDate = new Date(Date.UTC(
-      availableDate.date.getUTCFullYear(),
-      availableDate.date.getUTCMonth(),
-      availableDate.date.getUTCDate()
-    ));
+    const normalizedDate = normalizeToMidnightUTC(availableDate.date);
 
     // Skip if date filter is set and doesn't match
     if (date) {
-      const filterDate = new Date(date);
-      const normalizedFilter = new Date(Date.UTC(
-        filterDate.getUTCFullYear(),
-        filterDate.getUTCMonth(),
-        filterDate.getUTCDate()
-      ));
+      const normalizedFilter = normalizeToMidnightUTC(new Date(date));
       if (normalizedDate.getTime() !== normalizedFilter.getTime()) continue;
     }
 
-    // Find or create route group for this zone/date/serviceType
-    let routeGroup = await db.collection<RouteGroup>("route_groups").findOne({
-      zoneId: booking.zoneId,
-      date: normalizedDate,
-      serviceType: booking.serviceType,
-    });
-
-    if (!routeGroup) {
-      const now = new Date();
-      const result = await db.collection("route_groups").insertOne({
-        zoneId: booking.zoneId,
-        date: normalizedDate,
-        serviceType: booking.serviceType,
-        houseCount: 0,
-        createdAt: now,
-        updatedAt: now,
-      });
-      routeGroup = await db.collection<RouteGroup>("route_groups").findOne({
-        _id: result.insertedId,
-      });
-      console.log(`Created route group for zone ${booking.zoneId} on ${normalizedDate.toISOString()}`);
-    }
+    const routeGroup = await findOrCreateRouteGroup(db, booking.zoneId, normalizedDate, booking.serviceType);
 
     if (routeGroup) {
       await db.collection<Booking>("bookings").updateOne(
@@ -184,13 +168,7 @@ export async function handleOptimizeRoutes(data: OptimizeRoutesData) {
   // Update house counts for all route groups
   const allRouteGroups = await db.collection<RouteGroup>("route_groups").find({}).toArray();
   for (const group of allRouteGroups) {
-    const count = await db.collection<Booking>("bookings").countDocuments({
-      routeGroupId: group._id,
-    });
-    await db.collection<RouteGroup>("route_groups").updateOne(
-      { _id: group._id },
-      { $set: { houseCount: count, updatedAt: new Date() } }
-    );
+    await updateRouteGroupHouseCount(db, group._id);
   }
 
   // Now proceed with route optimization

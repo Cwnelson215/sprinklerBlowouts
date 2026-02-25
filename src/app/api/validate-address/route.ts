@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { geocodeAddress } from "@/lib/geocode";
 import { getDb } from "@/lib/mongodb";
-import { haversineDistance } from "@/lib/utils";
-import { ServiceZone } from "@/lib/types";
+import { findNearestZone } from "@/lib/utils";
 import { z } from "zod";
+import { withErrorHandler, parseBody } from "@/lib/api-helpers";
 
 const addressSchema = z.object({
   address: z.string().min(1),
@@ -12,62 +12,32 @@ const addressSchema = z.object({
   zip: z.string().regex(/^\d{5}$/),
 });
 
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const parsed = addressSchema.safeParse(body);
+export const POST = withErrorHandler("Error validating address", async (req: NextRequest) => {
+  const { data, error } = await parseBody(req, addressSchema);
+  if (error) return error;
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        { valid: false, error: "Invalid address format" },
-        { status: 400 }
-      );
-    }
+  const { address, city, state, zip } = data;
+  const result = await geocodeAddress(address, city, state, zip);
 
-    const { address, city, state, zip } = parsed.data;
-    const result = await geocodeAddress(address, city, state, zip);
-
-    if (!result) {
-      return NextResponse.json({
-        valid: false,
-        error: "We couldn't verify this address. Please check the address and try again.",
-      });
-    }
-
-    // Find matching zone using haversine distance
-    const db = await getDb();
-    const zones = await db.collection<ServiceZone>("service_zones")
-      .find({ isActive: true })
-      .toArray();
-
-    console.log("[validate-address] Geocoded:", { lat: result.lat, lng: result.lng });
-    console.log("[validate-address] Active zones found:", zones.length);
-
-    let matchedZone: ServiceZone | null = null;
-    let nearestDistance = Infinity;
-
-    for (const zone of zones) {
-      const dist = haversineDistance(result.lat, result.lng, zone.centerLat, zone.centerLng);
-      console.log(`[validate-address] Zone "${zone.name}": center=(${zone.centerLat}, ${zone.centerLng}), radius=${zone.radiusMi}mi, distance=${dist.toFixed(2)}mi`);
-      if (dist <= zone.radiusMi && dist < nearestDistance) {
-        matchedZone = zone;
-        nearestDistance = dist;
-      }
-    }
-
+  if (!result) {
     return NextResponse.json({
-      valid: true,
-      lat: result.lat,
-      lng: result.lng,
-      zoneId: matchedZone?._id.toHexString() ?? null,
-      zoneName: matchedZone?.name ?? null,
-      isInServiceArea: matchedZone !== null,
+      valid: false,
+      error: "We couldn't verify this address. Please check the address and try again.",
     });
-  } catch (error) {
-    console.error("Error validating address:", error);
-    return NextResponse.json(
-      { valid: false, error: "Failed to validate address" },
-      { status: 500 }
-    );
   }
-}
+
+  // Find matching zone using haversine distance
+  const db = await getDb();
+  const match = await findNearestZone(db, result.lat, result.lng);
+
+  console.log("[validate-address] Geocoded:", { lat: result.lat, lng: result.lng });
+
+  return NextResponse.json({
+    valid: true,
+    lat: result.lat,
+    lng: result.lng,
+    zoneId: match?.zone._id.toHexString() ?? null,
+    zoneName: match?.zone.name ?? null,
+    isInServiceArea: match !== null,
+  });
+});

@@ -1,8 +1,8 @@
 import { ObjectId } from "mongodb";
 import { getDb } from "../mongodb";
 import { geocodeAddress } from "../geocode";
-import { haversineDistance } from "../utils";
-import { Booking, ServiceZone } from "../types";
+import { findNearestZone } from "../utils";
+import { Booking } from "../types";
 import { scheduleJob, JOBS } from "../queue";
 
 interface GeocodeJobData {
@@ -37,25 +37,7 @@ export async function handleGeocodeJob(data: GeocodeJobData) {
   }
 
   // Find the nearest active zone
-  const zones = await db.collection<ServiceZone>("service_zones")
-    .find({ isActive: true })
-    .toArray();
-
-  let nearestZone: ServiceZone | null = null;
-  let nearestDistance = Infinity;
-
-  for (const zone of zones) {
-    const dist = haversineDistance(
-      result.lat,
-      result.lng,
-      zone.centerLat,
-      zone.centerLng
-    );
-    if (dist <= zone.radiusMi && dist < nearestDistance) {
-      nearestZone = zone;
-      nearestDistance = dist;
-    }
-  }
+  const match = await findNearestZone(db, result.lat, result.lng);
 
   // Update booking with geocode results and zone assignment
   await db.collection<Booking>("bookings").updateOne(
@@ -64,15 +46,15 @@ export async function handleGeocodeJob(data: GeocodeJobData) {
       $set: {
         lat: result.lat,
         lng: result.lng,
-        zoneId: nearestZone?._id ?? null,
-        status: nearestZone ? "AWAITING_SCHEDULE" : "PENDING",
+        zoneId: match?.zone._id ?? null,
+        status: match ? "AWAITING_SCHEDULE" : "PENDING",
         updatedAt: new Date(),
       },
     }
   );
 
   // If booking has a zone and a date, queue route group assignment
-  if (nearestZone && booking.availableDateId) {
+  if (match && booking.availableDateId) {
     try {
       await scheduleJob(JOBS.ASSIGN_ROUTE_GROUP, { bookingId });
     } catch (err) {
@@ -82,6 +64,6 @@ export async function handleGeocodeJob(data: GeocodeJobData) {
 
   console.log(
     `Geocoded booking ${booking.jobNumber}: (${result.lat}, ${result.lng})` +
-      (nearestZone ? ` -> zone ${nearestZone.name}` : " (no matching zone)")
+      (match ? ` -> zone ${match.zone.name}` : " (no matching zone)")
   );
 }

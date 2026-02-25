@@ -37,3 +37,32 @@ export function haversineDistance(
 function toRad(deg: number): number {
   return (deg * Math.PI) / 180;
 }
+
+import type { Db } from "mongodb";
+import type { ServiceZone } from "./types";
+
+/**
+ * Finds the nearest active service zone within radius for the given coordinates.
+ */
+export async function findNearestZone(
+  db: Db,
+  lat: number,
+  lng: number
+): Promise<{ zone: ServiceZone; distance: number } | null> {
+  const zones = await db.collection<ServiceZone>("service_zones")
+    .find({ isActive: true })
+    .toArray();
+
+  let nearestZone: ServiceZone | null = null;
+  let nearestDistance = Infinity;
+
+  for (const zone of zones) {
+    const dist = haversineDistance(lat, lng, zone.centerLat, zone.centerLng);
+    if (dist <= zone.radiusMi && dist < nearestDistance) {
+      nearestZone = zone;
+      nearestDistance = dist;
+    }
+  }
+
+  return nearestZone ? { zone: nearestZone, distance: nearestDistance } : null;
+}

@@ -26,3 +26,17 @@ const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
 export function isValidObjectId(value: string): boolean {
   return OBJECT_ID_RE.test(value);
 }
+
+export function maskEmail(email: string): string {
+  const [local, domain] = email.split("@");
+  if (!domain || local.length <= 2) return `**@${domain || "***"}`;
+  return `${local.slice(0, 2)}${"*".repeat(local.length - 2)}@${domain}`;
+}
+
+export function maskPhone(phone: string | null | undefined): string | null | undefined {
+  if (!phone) return phone;
+  const cleaned = phone.replace(/\D/g, "");
+  if (cleaned.length <= 6) return phone;
+  const visible = cleaned.slice(0, 2) + "*".repeat(cleaned.length - 6) + cleaned.slice(-4);
+  return visible;
+}
