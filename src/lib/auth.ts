@@ -2,15 +2,18 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest } from "next/server";
 
-function getJwtSecret(): Uint8Array {
-  const secret = process.env.JWT_SECRET;
-  if (!secret && process.env.NODE_ENV === "production") {
-    throw new Error("JWT_SECRET environment variable must be set in production");
-  }
-  return new TextEncoder().encode(secret || "dev-secret-change-in-production");
-}
+let _jwtSecret: Uint8Array | null = null;
 
-const JWT_SECRET = getJwtSecret();
+function getJwtSecret(): Uint8Array {
+  if (!_jwtSecret) {
+    const secret = process.env.JWT_SECRET;
+    if (!secret && process.env.NODE_ENV === "production") {
+      throw new Error("JWT_SECRET environment variable must be set in production");
+    }
+    _jwtSecret = new TextEncoder().encode(secret || "dev-secret-change-in-production");
+  }
+  return _jwtSecret;
+}
 
 const COOKIE_NAME = "admin_token";
 
@@ -25,12 +28,12 @@ export async function signToken(payload: AdminPayload): Promise<string> {
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("2h")
     .setIssuedAt()
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
 }
 
 export async function verifyToken(token: string): Promise<AdminPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     return payload as unknown as AdminPayload;
   } catch {
     return null;
