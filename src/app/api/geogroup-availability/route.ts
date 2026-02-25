@@ -61,6 +61,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const showAll = searchParams.get("showAll") === "true";
+
     const db = await getDb();
     const zoneObjectId = new ObjectId(zoneId);
 
@@ -151,7 +153,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    if (isFirstInZone) {
+    if (isFirstInZone || showAll) {
       // First booking in zone: Show all valid dates for the time block
       // Note: dates may be stored as strings or Date objects, so we query for both
       const dates = await db.collection<AvailableDate>("available_dates")

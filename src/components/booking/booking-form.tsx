@@ -9,6 +9,7 @@ import type { ServiceType } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Modal } from "@/components/ui/modal";
 import { BookingCalendar } from "./booking-calendar";
 import { TimeGrid } from "./time-grid";
 
@@ -50,6 +51,9 @@ export function BookingForm({ serviceType }: BookingFormProps) {
   const [selectedDateId, setSelectedDateId] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [isFirstInZone, setIsFirstInZone] = useState(false);
+  const [showAllDates, setShowAllDates] = useState(false);
+  const [showOverrideModal, setShowOverrideModal] = useState(false);
+  const [loadingAllDates, setLoadingAllDates] = useState(false);
   const router = useRouter();
 
   const {
@@ -183,6 +187,34 @@ export function BookingForm({ serviceType }: BookingFormProps) {
   const handleDateSelect = (dateId: string) => {
     setSelectedDateId(dateId);
     setSelectedTime(null); // Reset time when date changes
+  };
+
+  const handleShowAllDates = async () => {
+    if (!geoData) return;
+    setShowOverrideModal(false);
+    setLoadingAllDates(true);
+    setError(null);
+
+    try {
+      const { preferredTime, serviceType } = getValues();
+      const res = await fetch(
+        `/api/geogroup-availability?zoneId=${geoData.zoneId}&timeOfDay=${preferredTime}&serviceType=${serviceType}&showAll=true`
+      );
+
+      if (!res.ok) {
+        throw new Error("Failed to fetch available dates");
+      }
+
+      const result = await res.json();
+      setAvailableDates(result.availableDates);
+      setShowAllDates(true);
+      setSelectedDateId(null);
+      setSelectedTime(null);
+    } catch {
+      setError("Failed to load all available dates. Please try again.");
+    } finally {
+      setLoadingAllDates(false);
+    }
   };
 
   const onSubmit = async (data: BookingInput) => {
@@ -372,10 +404,29 @@ export function BookingForm({ serviceType }: BookingFormProps) {
               )}
               {isFirstInZone && (
                 <p className="text-sm text-brand-600 mt-1">
-                  You're the first in your area! Choose any available date.
+                  You&apos;re the first in your area! Choose any available date.
                 </p>
               )}
             </div>
+
+            {showAllDates && (
+              <div className="rounded-md bg-blue-50 px-4 py-2 text-sm text-blue-700 text-center">
+                Showing all available dates
+              </div>
+            )}
+
+            {!isFirstInZone && !showAllDates && (
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => setShowOverrideModal(true)}
+                  disabled={loadingAllDates}
+                  className="text-sm text-brand-600 underline hover:text-brand-700 disabled:opacity-50"
+                >
+                  {loadingAllDates ? "Loading..." : "Don\u2019t see a date that works?"}
+                </button>
+              </div>
+            )}
 
             {availableDates.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
@@ -388,6 +439,25 @@ export function BookingForm({ serviceType }: BookingFormProps) {
                 onSelectDate={handleDateSelect}
               />
             )}
+
+            <Modal
+              isOpen={showOverrideModal}
+              onClose={() => setShowOverrideModal(false)}
+              title="View All Available Dates?"
+              confirmLabel="Show All Available Dates"
+              cancelLabel="Keep Suggested Dates"
+              onConfirm={handleShowAllDates}
+            >
+              <p>
+                We suggest dates based on your location to group nearby
+                appointments together, which helps us provide efficient service
+                and keep costs low.
+              </p>
+              <p className="mt-2">
+                If none of the suggested dates work for you, you can choose to
+                view all available dates instead.
+              </p>
+            </Modal>
           </div>
         )}
 
