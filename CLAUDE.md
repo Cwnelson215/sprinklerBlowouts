@@ -107,6 +107,20 @@ Customers can look up existing bookings by job number at `/lookup/[jobNumber]`.
 - **Routes** — Route optimization and management (`/admin/routes`)
 - **Zones** — Service zone management with map interface (`/admin/zones`)
 
+### Server Initialization
+
+`src/instrumentation.ts` — Next.js instrumentation hook that starts the background job queue polling when the server boots (production only).
+
+### Security Headers
+
+`src/next.config.js` includes security headers (Content-Security-Policy, Strict-Transport-Security, X-Frame-Options, etc.) applied to all responses.
+
+### UI Components (`src/components/`)
+
+- **`components/admin/`** — Admin UI (layout, availability calendar, route map, etc.)
+- **`components/booking/`** — Booking flow (calendar, form, time grid)
+- **`components/ui/`** — Reusable primitives (badge, button, calendar, card, input, modal, select)
+
 ### Background Job Queue
 
 MongoDB-backed job queue (`src/lib/queue.ts`) with polling-based processing:
@@ -149,6 +163,8 @@ SES-based email sending (`src/lib/email/ses.ts`) with HTML templates (`src/lib/e
 | `lib/constants.ts` | Shared constants |
 | `lib/utils.ts` | General utilities |
 | `lib/route-export.ts` | Route data export |
+| `lib/rate-limit.ts` | In-memory rate limiting with configurable windows |
+| `lib/security.ts` | Regex escaping, error sanitization, pagination clamping, ObjectId validation |
 | `lib/use-osrm-route.ts` | OSRM routing hook |
 
 ### MongoDB Collections
@@ -171,7 +187,7 @@ Uses **Vitest** with **mongodb-memory-server** for isolated integration tests.
 - Setup: `src/test/setup.ts` — starts in-memory MongoDB, seeds env vars, cleans all collections between tests
 - Test helpers: `src/test/helpers/` — `auth.ts`, `db.ts`, `request.ts`
 - Coverage targets: `lib/**` and `app/api/**` (v8 provider)
-- 22 test files: 10 lib unit tests (`src/lib/__tests__/`) and 12 API route tests (`src/app/api/**/`__tests__/`)
+- 26 test files: 12 lib unit tests (`src/lib/__tests__/`), 12 API route tests (`src/app/api/**/__tests__/`), and 2 page-level tests (`src/app/lookup/__tests__/`, `src/app/lookup/[jobNumber]/__tests__/`)
 
 ## Configuration
 

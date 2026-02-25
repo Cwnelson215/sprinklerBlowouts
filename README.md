@@ -124,6 +124,8 @@ src/
 │   ├── route-optimizer.ts          # Route optimization
 │   ├── clustering.ts               # Geographic clustering
 │   ├── time-slots.ts               # Time slot management
+│   ├── rate-limit.ts               # In-memory rate limiting
+│   ├── security.ts                 # Input sanitization and validation helpers
 │   ├── email/                      # SES email sending and HTML templates
 │   └── workers/                    # Job handlers (geocode, route, email)
 └── test/                           # Test setup and helpers
@@ -147,7 +149,7 @@ Uses **Vitest** with **mongodb-memory-server** for isolated integration tests. C
 
 ```bash
 cd src
-npm test               # Run all 22 tests (10 lib + 12 API route)
+npm test               # Run all 26 tests (12 lib + 12 API route + 2 page)
 npm run test:watch     # Watch mode
 npm run test:coverage  # With v8 coverage (lib/** and app/api/**)
 ```
